@@ -16,7 +16,10 @@ void main
 )
 {	
     // vPosition = mul(transpose(mul(uModelViewMatrix, uProjectionMatrix)), float4(aPos.xyz, 1.0f));
-    vPosition  = mul(float4(aPos.xyz, 1.0f), mul(uModelViewMatrix, uProjectionMatrix)); // Does the same as above 
+
+    // Does the same as above, but faster, 
+    // thanks Rinnegatamente for telling me how to do this!
+    vPosition  = mul(float4(aPos.xyz, 1.0f), mul(uModelViewMatrix, uProjectionMatrix)); 
     vTexCoord0 = aTexCoord0;
     vColor     = aColor;
 }

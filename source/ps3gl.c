@@ -90,7 +90,7 @@ static struct
 
 	uint32_t texEnvMode; 
 	struct ps3gl_texture textures[MAX_TEXTURES];
-	struct ps3gl_texture boundTexture;
+	struct ps3gl_texture *boundTexture;
 	GLuint nextTextureID;
 
 	// Lighting
@@ -188,7 +188,7 @@ void glEnable( GLenum cap )
 			_opengl_state.depth_test = true;
 			break;
 		case GL_TEXTURE_2D:
-			_opengl_state.textureEnabled = false;
+			_opengl_state.texture0Enabled = false;
 			break;
 		default:
 			break;
@@ -206,7 +206,7 @@ void glDisable( GLenum cap )
 			_opengl_state.depth_test = false;
 			break;
 		case GL_TEXTURE_2D:
-			_opengl_state.textureEnabled = false;
+			_opengl_state.texture0Enabled = false;
 			break;
 		default:
 			break;
@@ -527,7 +527,7 @@ void glTexCoord2f(GLfloat s, GLfloat t)
  * Texture mapping
  */
 
-
+#if 0 // TODO
 void glTexImage2D( GLenum target, GLint level,
                    GLint internalFormat,
                    GLsizei width, GLsizei height,
@@ -554,7 +554,7 @@ void glTexImage2D( GLenum target, GLint level,
 	{
 		case GL_RGB:
 			currentTexture.data = rsxMemalign(128, width*height*4);
-			for(i=0; i<width*height*4; i+=4) {
+			for(size_t i=0; i<width*height*4; i+=4) {
 				currentTexture.data[i + 0] = 0xFF;
 				currentTexture.data[i + 1] = *pixels++;
 				currentTexture.data[i + 2] = *pixels++;
@@ -565,7 +565,7 @@ void glTexImage2D( GLenum target, GLint level,
 			break;
 		case GL_RGBA:
 			currentTexture.data = rsxMemalign(128, width*height*4);
-			for(i=0; i<width*height*4; i+=4) {
+			for(size_t i=0; i<width*height*4; i+=4) {
 				currentTexture.data[i + 1] = *pixels++;
 				currentTexture.data[i + 2] = *pixels++;
 				currentTexture.data[i + 3] = *pixels++;
@@ -576,7 +576,7 @@ void glTexImage2D( GLenum target, GLint level,
 			break;
 	}
 }
-
+#endif
 
 void glGenTextures( GLsizei n, GLuint *textures )
 {
@@ -643,7 +643,9 @@ void _setup_draw_env(void)
 	// TODO: Implement glScissor
 	rsxSetScissor(context, _opengl_state.viewport.x, _opengl_state.viewport.y, _opengl_state.viewport.w, _opengl_state.viewport.h);
 
+#if 0 // TODO
 	_ps3gl_load_texture();
+#endif
 
 	rsxLoadVertexProgram(context,vpo,vp_ucode);
 	rsxLoadFragmentProgramLocation(context,fpo,fp_offset,GCM_LOCATION_RSX);
