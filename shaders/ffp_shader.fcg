@@ -1,0 +1,56 @@
+// TexEnv Modes
+#define GL_BLEND				0x0BE2
+#define GL_MODULATE				0x2100
+#define GL_REPLACE				0x1E01
+
+void main
+(
+	// From Vertex Shader
+    in float4 vColor     : COLOR0,
+    in float2 vTexCoord0 : TEXCOORD0,
+
+	// From RSX
+	float vFog : FOG,
+	
+	// Out
+	out float4 oColor : COLOR0,
+
+	// Uniforms
+	uniform int uTextureEnabled = 0,
+	uniform int uTextureMode,
+	uniform int uTextureHasAlpha,
+	uniform sampler2D uTextureUnit,
+
+	uniform int uFogEnabled = 0,
+	uniform float4 uFogColor
+)
+{
+	oColor = vColor;
+
+	if(uTextureEnabled)
+	{
+		float4 texture0Color = tex2D(uTextureUnit, vTexCoord0.st);
+		if(uTextureMode == GL_BLEND)
+		{
+			oColor.rgb = lerp(oColor.rgb, float3(0,0,0), texture0Color.rgb);
+			if(uTextureHasAlpha)
+				oColor.a = oColor.a * texture0Color.a;
+			
+		}
+		if(uTextureMode == GL_MODULATE)
+		{
+			if(uTextureHasAlpha)
+				oColor = oColor * texture0Color;
+			else
+				oColor.rgb = oColor.rgb * texture0Color.rgb;
+		}
+		if(uTextureMode == GL_REPLACE)
+		{
+			oColor = texture0Color;
+		}
+	}
+
+	if(uFogEnabled)
+		oColor.rgb = lerp(oColor.rgb, uFogColor.rgb, vFog);
+
+}

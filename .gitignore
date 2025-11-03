@@ -1,0 +1,4 @@
+/build
+*.self
+*.elf
+/ignore
