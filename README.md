@@ -7,6 +7,6 @@ https://github.com/user-attachments/assets/5fad3b1b-b056-4624-888f-c325e55272db
 - Make RGB -> DRGB and RGBA -> ARGB conversion faster (Maybe using Altivec?)
 - Implement glMatrixPush/glMatrixPop
 - Implement Lights
-- Implement Non Linear Fog
+- Implement Fog
 - Implement Textures (WIP)
 - Make code less bad
