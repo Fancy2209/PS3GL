@@ -19,6 +19,8 @@
 #include "ffp_shader_vpo.h"
 #include "ffp_shader_fpo.h"
 
+#define GCM_TEXTURE_CONVOLUTION_NONE 0
+
 enum _ps3gl_rsx_constants
 {
 	PS3GL_Uniform_ModelViewMatrix,
@@ -36,7 +38,8 @@ struct ps3gl_texture {
 	GLuint id;
 	GLboolean allocated;
 	uint8_t* data;
-	gcmTexture gcmTexture
+	gcmTexture gcmTexture;
+	GLuint minFilter, magFilter;
 };
 
 
@@ -521,18 +524,6 @@ void glTexCoord2f(GLfloat s, GLfloat t)
  * Texture mapping
  */
 
- /*
- struct ps3gl_texture {
-	GLuint id;
-	GLboolean allocated;
-	GLenum target;
-	uint8_t* data;
-	GLint width, height, bpp;
-	GLuint fmt, minFilter, magFilter;
-	GLboolean hasAlpha;
-};
-*/
-
 void glTexImage2D( GLenum target, GLint level,
                    GLint internalFormat,
                    GLsizei width, GLsizei height,
@@ -543,40 +534,65 @@ void glTexImage2D( GLenum target, GLint level,
 		return;
 
 	struct ps3gl_texture currentTexture = _opengl_state.boundTexture;
-	currentTexture.gcmTexture.width = width;
-	currentTexture.gcmTexture.height = height;
+	currentTexture->gcmTexture.width = width;
+	currentTexture->gcmTexture.height = height;
+	currentTexture->gcmTexture.depth = 1;
+	currentTexture->gcmTexture.mipmap = (level != 0);
+	currentTexture->gcmTexture.location = GCM_LOCATION_RSX;
+
 	switch (internalFormat) {
 		case GL_RGB: // There are no 24bpp textures in RSX
 		case 3:
 		case GL_RGBA:
 		case 4:
-			currentTexture.gcmTexture.pitch = width*height*4;
+			currentTexture->gcmTexture.pitch = width*4;
 			break;
 	}
 
 	switch(format)
 	{
 		case GL_RGB:
-			currentTexture.data = (uint8_t*)rsxMemalign(128, width*height*4);
-			for(size_t i=0; i<width*height*3; i+=3) {
-				(((uint8_t*))currentTexture.data)[i + 0] = 0xFF;
-				(((uint8_t*))currentTexture.data)[i + 1] = *pixels++;
-				(((uint8_t*))currentTexture.data)[i + 2] = *pixels++;
-				(((uint8_t*))currentTexture.data)[i + 3] = *pixels++;
+			const uint8_t *src = (const uint8_t*)pixels;
+			currentTexture->data = (uint8_t*)rsxMemalign(128, width*height*4);
+			for(size_t i=0; i<width*height*4; i+=4) {
+				(((uint8_t*))currentTexture->data)[i + 0] = 0xFF;      // A
+				(((uint8_t*))currentTexture->data)[i + 1] = *src++; // R
+				(((uint8_t*))currentTexture->data)[i + 2] = *src++; // G
+				(((uint8_t*))currentTexture->data)[i + 3] = *src++; // B
 			}
-			currentTexture.gcmTexture.format = GCM_TEXTURE_FORMAT_D8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
-			currentTexture.hasAlpha = false;
+			rsxAddressToOffset(currentTexture->data, &currentTexture->gcmTexture.offset);
+			currentTexture->gcmTexture.format = GCM_TEXTURE_FORMAT_A8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
+			currentTexture->gcmTexture.remap  = (
+						   (GCM_TEXTURE_REMAP_TYPE_ONE << GCM_TEXTURE_REMAP_TYPE_A_SHIFT) |
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_R_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_R << GCM_TEXTURE_REMAP_COLOR_R_SHIFT) |
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) |
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_B_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_B_SHIFT)
+			);
+			currentTexture->hasAlpha = false;
 			break;
 		case GL_RGBA:
-			currentTexture.data = (uint8_t*)rsxMemalign(128, width*height*4);
-			for(size_t i=0; i<width*height*4; i+=4) {
-				(((uint8_t*))currentTexture.data)[i + 1] = *pixels++;
-				(((uint8_t*))currentTexture.data)[i + 2] = *pixels++;
-				(((uint8_t*))currentTexture.data)[i + 3] = *pixels++;
-				(((uint8_t*))currentTexture.data)[i + 0] = *pixels++;
-			}
-			currentTexture.fmt = GCM_TEXTURE_FORMAT_A8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
-			currentTexture.hasAlpha = true;
+			currentTexture->data = (uint8_t*)rsxMemalign(128, width*height*4);
+			memcpy((void*)currentTexture->data, pixels);
+			rsxAddressToOffset(currentTexture->data, &currentTexture->gcmTexture.offset);
+			currentTexture->gcmTexture.format = GCM_TEXTURE_FORMAT_A8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
+			currentTexture->gcmTexture.remap  = (
+							// Maps Red to first Channel 
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_R_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_R << GCM_TEXTURE_REMAP_COLOR_A_SHIFT) |
+							// Maps Red to second Channel 
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |	
+						   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_R_SHIFT) |
+							// Maps Red to third Channel 
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_B_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) |
+						   // Maps Alpha to last Channel 
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_A_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_B_SHIFT)
+			);
+			currentTexture->hasAlpha = true;
 			break;
 	}
 }
@@ -594,8 +610,8 @@ void glGenTextures( GLsizei n, GLuint *textures )
 		{
 			_opengl_state.textures[i].id = id;
 			_opengl_state.textures[i].allocated = true;
-			_opengl_state.textures[i].minFilter = GL_NEAREST_MIPMAP_LINEAR;
-			_opengl_state.textures[i].magFilter = GL_LINEAR;
+			_opengl_state.textures[i].minFilter = GCM_TEXTURE_NEAREST_MIPMAP_LINEAR;
+			_opengl_state.textures[i].magFilter = GCM_TEXTURE_LINEAR;
 		}
 	}
 }
@@ -612,6 +628,19 @@ void glBindTexture( GLenum target, GLuint texture )
     if (texture < MAX_TEXTURES && !_opengl_state.textures[texture].allocated) {
         _opengl_state.textures[texture].target = target;
         _opengl_state.textures[texture].gcmTexture.cubemap = (target == GL_TEXTURE_CUBE_MAP);
+		switch(format)
+		{
+			case GL_TEXTURE_1D:
+				_opengl_state.textures[texture].gcmTexture.dimension = GCM_TEXTURE_DIMS_1D;
+				break;
+			case GL_TEXTURE_2D:
+				_opengl_state.textures[texture].gcmTexture.dimension = GCM_TEXTURE_DIMS_2D;
+				break;
+			case GL_TEXTURE_3D:
+				_opengl_state.textures[texture].gcmTexture.dimension = GCM_TEXTURE_DIMS_3D;
+				break;
+			default: break;
+		}
     }
 
     _opengl_state.boundTexture = &_opengl_state.textures[texture];
