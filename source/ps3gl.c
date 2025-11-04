@@ -770,6 +770,7 @@ void ps3glInit(void)
 	_opengl_state.textures[0].id = 0;
 	_opengl_state.textures[0].allocated = true;
 	_opengl_state.textures[0].data = NULL;
+    _opengl_state.boundTexture = &_opengl_state.textures[0];
 }
 
 void ps3glSwapBuffers(void)
