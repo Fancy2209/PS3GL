@@ -35,11 +35,8 @@ enum _ps3gl_rsx_constants
 struct ps3gl_texture {
 	GLuint id;
 	GLboolean allocated;
-	GLenum target;
 	uint8_t* data;
-	GLint width, height, bpp;
-	GLuint fmt, minFilter, magFilter;
-	GLboolean hasAlpha;
+	gcmTexture gcmTexture
 };
 
 
@@ -546,17 +543,16 @@ void glTexImage2D( GLenum target, GLint level,
 		return;
 
 	struct ps3gl_texture currentTexture = _opengl_state.boundTexture;
-	currentTexture.width = width;
-	currentTexture.height = height;
-	if(internalFormat != 2 && internalFormat != 3 && internalFormat != 4) // InternalFormat isn't just the amount fo BPP
-	{
-		switch (internalFormat) {
-			case GL_RGB: // There are no 24bpp textures in RSX
-			case GL_RGBA:
-				currentTexture.bpp = 4;
-				break;
-		}
-	} else currentTexture.bpp = internalFormat;
+	currentTexture.gcmTexture.width = width;
+	currentTexture.gcmTexture.height = height;
+	switch (internalFormat) {
+		case GL_RGB: // There are no 24bpp textures in RSX
+		case 3:
+		case GL_RGBA:
+		case 4:
+			currentTexture.gcmTexture.pitch = width*height*4;
+			break;
+	}
 
 	switch(format)
 	{
@@ -568,7 +564,7 @@ void glTexImage2D( GLenum target, GLint level,
 				(((uint8_t*))currentTexture.data)[i + 2] = *pixels++;
 				(((uint8_t*))currentTexture.data)[i + 3] = *pixels++;
 			}
-			currentTexture.fmt = GCM_TEXTURE_FORMAT_D8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
+			currentTexture.gcmTexture.format = GCM_TEXTURE_FORMAT_D8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
 			currentTexture.hasAlpha = false;
 			break;
 		case GL_RGBA:
@@ -615,6 +611,7 @@ void glBindTexture( GLenum target, GLuint texture )
 
     if (texture < MAX_TEXTURES && !_opengl_state.textures[texture].allocated) {
         _opengl_state.textures[texture].target = target;
+        _opengl_state.textures[texture].gcmTexture.cubemap = (target == GL_TEXTURE_CUBE_MAP);
     }
 
     _opengl_state.boundTexture = &_opengl_state.textures[texture];
@@ -744,10 +741,6 @@ void ps3glInit(void)
 	_opengl_state.textures[0].id = 0;
 	_opengl_state.textures[0].allocated = true;
 	_opengl_state.textures[0].data = NULL;
-	_opengl_state.textures[0].width = 0;
-	_opengl_state.textures[0].height = 0;
-	_opengl_state.textures[0].bpp = 0;
-	_opengl_state.textures[0].hasAlpha = false;
 }
 
 void ps3glSwapBuffers(void)
