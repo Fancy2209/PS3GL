@@ -5,7 +5,21 @@
 #include <malloc.h>
 #include <ppu-types.h>
 
+#if __has_include(<sysutil/video_out.h>)
 #include <sysutil/video_out.h>
+#else
+// Compatibility for non PS3Aqua PSL1GHT
+#include <sysutil/video.h>
+#define videoOutState videoState
+#define videoOutResolution videoResolution
+#define videoOutConfiguration videoConfiguration
+
+#define videoOutGetState videoGetState
+#define videoOutGetResolution videoGetResolution
+#define videoOutConfigure videoConfigure
+
+#define VIDEO_OUT_BUFFER_FORMAT_XRGB VIDEO_BUFFER_FORMAT_XRGB
+#endif
 
 #include "rsxutil.h"
 
