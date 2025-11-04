@@ -16,13 +16,8 @@
 // TODO: Make the rsxutil functionality into ps3glInit
 #include <rsxutil.h>
 
-// TODO: Maybe split the shaders instead of the many ifs?
 #include "ffp_shader_vpo.h"
 #include "ffp_shader_fpo.h"
-
-// Copied from OpenGX, not sure if I should modify these values
-#define MAX_PROJ_STACK 4   // Proj. matrix stack depth
-#define MAX_MODV_STACK 16  // Modelview matrix stack depth
 
 enum _ps3gl_rsx_constants
 {
@@ -41,13 +36,17 @@ struct ps3gl_texture {
 	GLuint id;
 	GLboolean allocated;
 	GLenum target;
-	GLuint* data;
+	uint8_t* data;
 	GLint width, height, bpp;
-	GLuint fmt;
+	GLuint fmt, minFilter, magFilter;
 	GLboolean hasAlpha;
 };
 
-#define MAX_TEXTURES 1024
+
+// Copied from OpenGX, not sure if I should modify these values
+#define MAX_PROJ_STACK 4   // Proj. matrix stack depth
+#define MAX_MODV_STACK 16  // Modelview matrix stack depth
+#define MAX_TEXTURES 1024 // Max number of texture objs
 
 static struct
 {
@@ -82,8 +81,6 @@ static struct
     VmathMatrix4 *curr_mtx;
 
 	// Textures
-
-	// textures
 	rsxProgramAttrib* texture0Unit;
 	bool texture0Enabled;
 	bool texture0HasAlpha;
@@ -527,7 +524,18 @@ void glTexCoord2f(GLfloat s, GLfloat t)
  * Texture mapping
  */
 
-#if 0 // TODO
+ /*
+ struct ps3gl_texture {
+	GLuint id;
+	GLboolean allocated;
+	GLenum target;
+	uint8_t* data;
+	GLint width, height, bpp;
+	GLuint fmt, minFilter, magFilter;
+	GLboolean hasAlpha;
+};
+*/
+
 void glTexImage2D( GLenum target, GLint level,
                    GLint internalFormat,
                    GLsizei width, GLsizei height,
@@ -553,30 +561,29 @@ void glTexImage2D( GLenum target, GLint level,
 	switch(format)
 	{
 		case GL_RGB:
-			currentTexture.data = rsxMemalign(128, width*height*4);
-			for(size_t i=0; i<width*height*4; i+=4) {
-				currentTexture.data[i + 0] = 0xFF;
-				currentTexture.data[i + 1] = *pixels++;
-				currentTexture.data[i + 2] = *pixels++;
-				currentTexture.data[i + 3] = *pixels++;
+			currentTexture.data = (uint8_t*)rsxMemalign(128, width*height*4);
+			for(size_t i=0; i<width*height*3; i+=3) {
+				(((uint8_t*))currentTexture.data)[i + 0] = 0xFF;
+				(((uint8_t*))currentTexture.data)[i + 1] = *pixels++;
+				(((uint8_t*))currentTexture.data)[i + 2] = *pixels++;
+				(((uint8_t*))currentTexture.data)[i + 3] = *pixels++;
 			}
 			currentTexture.fmt = GCM_TEXTURE_FORMAT_D8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
 			currentTexture.hasAlpha = false;
 			break;
 		case GL_RGBA:
-			currentTexture.data = rsxMemalign(128, width*height*4);
+			currentTexture.data = (uint8_t*)rsxMemalign(128, width*height*4);
 			for(size_t i=0; i<width*height*4; i+=4) {
-				currentTexture.data[i + 1] = *pixels++;
-				currentTexture.data[i + 2] = *pixels++;
-				currentTexture.data[i + 3] = *pixels++;
-				currentTexture.data[i + 0] = *pixels++;
+				(((uint8_t*))currentTexture.data)[i + 1] = *pixels++;
+				(((uint8_t*))currentTexture.data)[i + 2] = *pixels++;
+				(((uint8_t*))currentTexture.data)[i + 3] = *pixels++;
+				(((uint8_t*))currentTexture.data)[i + 0] = *pixels++;
 			}
 			currentTexture.fmt = GCM_TEXTURE_FORMAT_A8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
 			currentTexture.hasAlpha = true;
 			break;
 	}
 }
-#endif
 
 void glGenTextures( GLsizei n, GLuint *textures )
 {
@@ -591,6 +598,8 @@ void glGenTextures( GLsizei n, GLuint *textures )
 		{
 			_opengl_state.textures[i].id = id;
 			_opengl_state.textures[i].allocated = true;
+			_opengl_state.textures[i].minFilter = GL_NEAREST_MIPMAP_LINEAR;
+			_opengl_state.textures[i].magFilter = GL_LINEAR;
 		}
 	}
 }
@@ -629,6 +638,26 @@ void _setup_draw_env(void)
 	rsxSetDepthTestEnable(context, _opengl_state.depth_test);
 	rsxSetDepthWriteEnable(context, _opengl_state.depth_mask);
 	rsxSetDepthFunc(context, _opengl_state.depth_func);
+
+	if(_opengl_state.fog.enabled)
+	{
+		rsxSetFogMode(context, _opengl_state.fog.mode);
+		float p0 = 0;
+		float p1 = 0;
+		switch(_opengl_state.fog.mode)
+		{
+			case GCM_FOG_MODE_LINEAR:
+				// TODO: Confirm these are right
+				p0 = end/(end-start);
+				p1 = 1/(end-start);
+				break;
+			// TODO: Figure out EXP and EXP2 params
+			default:
+				break;
+
+		}
+		rsxSetFogParams(context, p0, p1);
+	}
 
 	rsxSetViewport(context, 
 		_opengl_state.viewport.x, 
