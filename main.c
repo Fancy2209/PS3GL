@@ -30,6 +30,7 @@ float rquad = 0.0f;
 
 GLvoid LoadGLTextures()
 {
+#if 0
 	// Load Texture
 	uint8_t *texture1;
 	int sizeX, sizeY, n;
@@ -43,6 +44,7 @@ GLvoid LoadGLTextures()
 	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
 	glTexImage2D(GL_TEXTURE_2D, 0, 3, sizeX, sizeY, 0, GL_RGB, GL_UNSIGNED_BYTE, texture1);
+#endif
 };
 
 
@@ -119,15 +121,11 @@ GLvoid InitGL(GLsizei Width, GLsizei Height)	// This Will Be Called Right After 
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();							// Reset The Projection Matrix
 
-	glViewport(0, 0, Width, Height);
-	glScissor(0, 0, Width, Height);
-
  	VmathMatrix4 m;
     vmathM4MakePerspective(&m, 45.0f, (GLfloat)Width/(GLfloat)Height, 0.1f, 100.0f);
     glMultMatrixf((const GLfloat *)&m);
 
 	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();                           // Reset The Modelview Matrix
 }
 
 extern u32 display_width;
