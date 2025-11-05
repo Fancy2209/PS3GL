@@ -15,12 +15,16 @@ include $(PSL1GHT)/ppu_rules
 # SOURCES is a list of directories containing source code
 # INCLUDES is a list of directories containing extra header files
 #---------------------------------------------------------------------------------
-TARGET		:=	libPS3GL
+TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
 SOURCES		:=	source
 DATA		:=	data
 SHADERS		:=	shaders
 INCLUDES	:=	include
+
+TITLE		:=	NeHe Lesson 6 - PS3GL
+APPID		:=	PS3GL006
+CONTENTID	:=	UP0001-$(APPID)_00-0000000000000000
 
 #---------------------------------------------------------------------------------
 # options for code generation
@@ -34,13 +38,13 @@ LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
 #---------------------------------------------------------------------------------
-LIBS	:=	-lsimdmath -lrsx -lgcm_sys -lio -lsysutil -lrt -llv2 -lm
+LIBS	:=	-lPS3GL -lsimdmath -lrsx -lgcm_sys -lio -lsysutil -lrt -llv2 -lm
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:=
+LIBDIRS	:= $(PS3DEV)/ppu/portlibs
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
@@ -114,15 +118,15 @@ $(BUILD):
 clean:
 	@echo clean ...
 	@rm -fr $(BUILD) $(OUTPUT).elf $(OUTPUT).self
-#---------------------------------------------------------------------------------
-install:
-	@echo installing to $(PS3DEV)/ppu/portlibs ...
-	mkdir -p $(PS3DEV)/ppu/portlibs/lib
-	cp -r libPS3GL.a $(PS3DEV)/ppu/portlibs/lib
-	mkdir -p $(PS3DEV)/ppu/portlibs/include
-	cp -r include/* $(PS3DEV)/ppu/portlibs/include
-#---------------------------------------------------------------------------------
 
+#---------------------------------------------------------------------------------
+run:
+	ps3load $(OUTPUT).self
+
+#---------------------------------------------------------------------------------
+pkg:	$(BUILD) $(OUTPUT).pkg
+
+#---------------------------------------------------------------------------------
 else
 
 DEPENDS	:=	$(OFILES:.o=.d)
@@ -130,7 +134,8 @@ DEPENDS	:=	$(OFILES:.o=.d)
 #---------------------------------------------------------------------------------
 # main targets
 #---------------------------------------------------------------------------------
-$(OUTPUT).a:	$(OFILES)
+$(OUTPUT).self: $(OUTPUT).elf
+$(OUTPUT).elf:	$(OFILES)
 
 #---------------------------------------------------------------------------------
 # This rule links in binary data with the .bin extension

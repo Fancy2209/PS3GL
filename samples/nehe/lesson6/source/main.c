@@ -1,3 +1,5 @@
+// NeHe OpenGL Lesson 6, modified for PS3 and to use stb_image for image loading
+
 #include <math.h>
 #include <stdio.h>
 #include <stdbool.h>

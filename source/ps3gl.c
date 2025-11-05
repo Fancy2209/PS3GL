@@ -1,133 +1,29 @@
 // PS3GL - An OpenGL 1.5 Compatibility Layer on top of the RSX API
 
-#include <rsx/rsx.h>
 #include <GL/gl.h>
-#include <vectormath/c/vectormath_aos.h>
 
-#include <string.h>
-#include <malloc.h>
-#include <math.h>
+// TODO: Move the rsxutil functionality into ps3glInit
+#include "rsxutil.h"
 
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdio.h>
-
-// TODO: Make the rsxutil functionality into ps3glInit
-#include <rsxutil.h>
-
+#include "ps3gl.h"
 #include "ffp_shader_vpo.h"
 #include "ffp_shader_fpo.h"
 
-#define GCM_TEXTURE_CONVOLUTION_NONE 0
-#define GCM_TEXTURE_CLAMP_TO_BORDER GCM_TEXTURE_BORDER
 
-enum _ps3gl_rsx_constants
-{
-	PS3GL_Uniform_ModelViewMatrix,
-	PS3GL_Uniform_ProjectionMatrix,
-	PS3GL_Uniform_TextureEnabled,
-	PS3GL_Uniform_TextureMode,
-	//PS3GL_Uniform_TextureHasAlpha,
-	PS3GL_Uniform_FogEnabled,
-	PS3GL_Uniform_FogColor,
-	PS3GL_Uniform_Count,
-};
-
-enum _ps3gl_texenv_modes
-{
-	PS3GL_TEXENV_BLEND = 0,
-	PS3GL_TEXENV_MODULATE = 1,
-	PS3GL_TEXENV_REPLACE = 2,
-};
-
-struct ps3gl_texture {
-	GLuint id, target;
-	GLboolean allocated;
-	uint8_t* data;
-	gcmTexture gcmTexture;
-	GLint minFilter, magFilter;
-	GLint wrapS, wrapR, wrapT;
-	//GLboolean hasAlpha;
-};
-
-
-// Copied from OpenGX, not sure if I should modify these values
-#define MAX_PROJ_STACK 4   // Proj. matrix stack depth
-#define MAX_MODV_STACK 16  // Modelview matrix stack depth
-#define MAX_TEXTURES 1024 // Max number of texture objs
-
-static struct
-{
-
-	struct { 
-		uint8_t r, g, b, a;
-	} clear_color;
-	uint32_t color_mask;
-
-	struct {
-		uint16_t x,y,w,h;
-		float scale[4], offset[4];
-	} viewport;
-
-	struct {
-		uint16_t x,y,w,h;
-	} scissor;
-
-	uint32_t clear_depth;
-	float depth_near;
-	float depth_far;
-	bool depth_mask;
-	bool depth_test;
-	uint32_t depth_func;
-
-	uint32_t clear_stencil;
-
-	// Matrices // TODO: Add Stack for Push/PopMatrix
-	uint32_t matrix_mode;
-	VmathMatrix4 modelview_matrix;
-    VmathMatrix4 projection_matrix;
-    VmathMatrix4 *curr_mtx;
-
-	// Textures
-	rsxProgramAttrib* texture0Unit;
-	bool texture0Enabled;
-	//bool texture0HasAlpha;
-
-	GLint texEnvMode; 
-	struct ps3gl_texture textures[MAX_TEXTURES];
-	struct ps3gl_texture *boundTexture;
-	GLuint nextTextureID;
-
-	// Lighting
-	uint32_t shade_model;
-
-	// Fog
-	struct {
-		bool enabled;
-		int32_t mode;
-		float start, end, density;
-		float color[4];
-	} fog;
-
-	rsxProgramConst *prog_consts[PS3GL_Uniform_Count];
-
-} _opengl_state;
+static struct ps3gl_opengl_state _opengl_state;
 
 u32 fp_offset;
 u32 *fp_buffer;
 
 void *vp_ucode = NULL;
-rsxVertexProgram *vpo = (rsxVertexProgram*)ffp_shader_vpo;
-
 void *fp_ucode = NULL;
+
+rsxVertexProgram *vpo = (rsxVertexProgram*)ffp_shader_vpo;
 rsxFragmentProgram *fpo = (rsxFragmentProgram*)ffp_shader_fpo;
 
 /*
  * Miscellaneous
  */
-
-void glClearIndex( GLfloat c );
 
 void glClearColor( GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha )
 {
@@ -136,6 +32,18 @@ void glClearColor( GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha )
 	_opengl_state.clear_color.g = ((uint8_t)(green * 255.0f));
 	_opengl_state.clear_color.b = ((uint8_t)(blue  * 255.0f));
 }
+
+// from mesa
+static inline uint32_t
+pack_zeta(bool use_stencil, double depth, unsigned stencil)
+{
+   uint32_t zuint = (uint32_t)(depth * 4294967295.0);
+   //if (format != GCM_SURFACE_ZETA_Z16)
+    if (use_stencil)
+ 	  return (zuint & 0xffffff00) | (stencil & 0xff);
+   return zuint >> 16;
+}
+
 
 void glClear( GLbitfield mask )
 {
@@ -151,16 +59,13 @@ void glClear( GLbitfield mask )
         	(_opengl_state.clear_color.b << 0)
 		);
 	}
-	if(mask & GL_DEPTH_BUFFER_BIT)
+	if((mask & GL_DEPTH_BUFFER_BIT) || (mask & GL_STENCIL_BUFFER_BIT))
 	{
-		rsxSetClearDepthStencil(context, (_opengl_state.clear_depth << 8) | (_opengl_state.clear_stencil & 0xFF));
+		// TODO: We currently use GCM_SURFACE_ZETA_Z16, 
+		// pass true to pack_zeta when we enable stencil 
+		// and start using GCM_SURFACE_ZETA_Z24S8 instead.
+		rsxSetClearDepthStencil(context, pack_zeta(false, _opengl_state.clear_depth, _opengl_state.clear_stencil));
 		rsx_mask |= GCM_CLEAR_Z;
-	}
-
-	if(mask & GL_STENCIL_BUFFER_BIT)
-	{
-		rsxSetClearDepthStencil(context, (_opengl_state.clear_depth << 8) | (_opengl_state.clear_stencil & 0xFF));
-		rsx_mask |= GCM_CLEAR_S;
 	}
 
 	rsxClearSurface(context, rsx_mask);
@@ -221,8 +126,6 @@ void glDisable( GLenum cap )
 
 GLenum glGetError( void ) { return GL_NO_ERROR; } // TODO?
 
-const GLubyte * glGetString( GLenum name );
-
 void glFinish( void ) {} // We call rsxFinish every frame
 
 void glFlush( void ) {} // We call rsxFlushBuffer every frame
@@ -235,7 +138,7 @@ void glHint( GLenum target, GLenum mode ) {} // No idea how to implement this
 
 void glClearDepth( GLclampd depth )
 {
-	_opengl_state.clear_depth = (uint32_t)(depth * 0xFFFFFF);	
+	_opengl_state.clear_depth = depth;	
 }
 
 void glDepthFunc( GLenum func )
@@ -539,6 +442,14 @@ void glTexCoord2f(GLfloat s, GLfloat t)
  }
 
 /*
+ * Stenciling
+ */
+void glClearStencil(GLint s)
+{
+	_opengl_state.clear_stencil = s;
+}
+
+/*
  * Texture mapping
  */
 
@@ -753,7 +664,6 @@ void glTexImage2D( GLenum target, GLint level,
 						   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) |
 						   (GCM_TEXTURE_REMAP_COLOR_R << GCM_TEXTURE_REMAP_COLOR_R_SHIFT) |
 						   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_A_SHIFT));
-			//currentTexture->hasAlpha = false;
 			break;
 		case GL_RGBA:
 			currentTexture->data = (uint8_t*)rsxMemalign(128, width*height*4);
@@ -774,7 +684,6 @@ void glTexImage2D( GLenum target, GLint level,
 						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_A_SHIFT) |
 						   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_B_SHIFT)
 			);
-			//currentTexture->hasAlpha = true;
 			break;
 	}
 }
@@ -800,7 +709,6 @@ void glGenTextures( GLsizei n, GLuint *textures )
             _opengl_state.textures[id].wrapS = GCM_TEXTURE_REPEAT;
             _opengl_state.textures[id].wrapT = GCM_TEXTURE_REPEAT;
             _opengl_state.textures[id].wrapR = GCM_TEXTURE_REPEAT;
-            //_opengl_state.textures[id].hasAlpha = GL_FALSE;
 		}
 	}
 }
@@ -835,40 +743,43 @@ void _ps3gl_load_texture(void)
 {
 	if((_opengl_state.texture0Unit == NULL || _opengl_state.boundTexture == NULL)) return;
 
-	if(!_opengl_state.texture0Enabled)
-		return;
+	if(!_opengl_state.texture0Enabled) return;
 
+	const int tu0Index = _opengl_state.texture0Unit->index;
+	const gcmTexture *boundGCMTex = &_opengl_state.boundTexture->gcmTexture;
 
-	printf("%u, %u\n", _opengl_state.boundTexture->gcmTexture.width, _opengl_state.boundTexture->gcmTexture.height);
 	rsxInvalidateTextureCache(context,GCM_INVALIDATE_TEXTURE);
 	rsxLoadTexture(context, 
-		_opengl_state.texture0Unit->index, 
-		&_opengl_state.boundTexture->gcmTexture);
+		tu0Index, 
+		boundGCMTex
+	);
 	rsxTextureControl(context, 
 		_opengl_state.texture0Unit->index, 
-		GCM_TRUE,
-		0,
-		0,
-		GCM_TEXTURE_MAX_ANISO_1);
+		true,
+		0<<8,  // TODO: No idea if this is right for minLOD
+		12<<8, // TODO: No idea if this is right for maxLOD
+		GCM_TEXTURE_MAX_ANISO_16 // TODO: 1 or 16 for max AA?
+	);
 	rsxTextureFilter(context, 
-		_opengl_state.texture0Unit->index, 
+		tu0Index, 
 		0,
 		_opengl_state.boundTexture->minFilter,
 		_opengl_state.boundTexture->magFilter,
-		0);
+		GCM_TEXTURE_CONVOLUTION_QUINCUNX // TODO: Do I use QUICKUNX or NONE?
+	);
 	rsxTextureWrapMode(context,
-		_opengl_state.texture0Unit->index, 
+		tu0Index, 
 		_opengl_state.boundTexture->wrapS, 
 		_opengl_state.boundTexture->wrapT, 
 		_opengl_state.boundTexture->wrapR, 
-		0, GCM_TEXTURE_ZFUNC_LESS, 0);
+		0,
+		GCM_TEXTURE_ZFUNC_LESS, 
+		0
+	);
 }
 
 void _setup_draw_env(void)
 {
-	//if(_opengl_state.boundTexture)
-	//	_opengl_state.texture0HasAlpha = _opengl_state.boundTexture->hasAlpha;
-
 	rsxSetShadeModel(context, _opengl_state.shade_model);
 	rsxSetColorMask(context, _opengl_state.color_mask);
 	rsxSetColorMaskMrt(context,0);
@@ -908,7 +819,7 @@ void _setup_draw_env(void)
 		_opengl_state.viewport.offset);
 
 	// TODO: Implement glScissor
-	rsxSetScissor(context, _opengl_state.viewport.x, _opengl_state.viewport.y, _opengl_state.viewport.w, _opengl_state.viewport.h);
+	rsxSetScissor(context, _opengl_state.scissor.x, _opengl_state.scissor.y, _opengl_state.scissor.w, _opengl_state.scissor.h);
 
 	_ps3gl_load_texture();
 
@@ -916,17 +827,14 @@ void _setup_draw_env(void)
 	rsxSetVertexProgramParameter(context,vpo,_opengl_state.prog_consts[PS3GL_Uniform_ModelViewMatrix],(float*)&_opengl_state.modelview_matrix);
 	rsxSetVertexProgramParameter(context,vpo,_opengl_state.prog_consts[PS3GL_Uniform_ProjectionMatrix],(float*)&_opengl_state.projection_matrix);
 
-	rsxSetFragmentProgramParameter(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_TextureEnabled],(float*)&_opengl_state.texture0Enabled,fp_offset,GCM_LOCATION_RSX);
-	rsxSetFragmentProgramParameter(context,fpo,	_opengl_state.prog_consts[PS3GL_Uniform_TextureMode],(float*)&_opengl_state.texEnvMode,fp_offset,GCM_LOCATION_RSX);
-	// rsxSetFragmentProgramParameter(context,fpo,	_opengl_state.prog_consts[PS3GL_Uniform_TextureHasAlpha],(float*)&_opengl_state.texture0HasAlpha,fp_offset,GCM_LOCATION_RSX);
-	printf("TexEnvMode: %i TexEnabled: %i\n", _opengl_state.texEnvMode, _opengl_state.texture0Enabled);
-
-
-	rsxSetFragmentProgramParameter(context,fpo,	_opengl_state.prog_consts[PS3GL_Uniform_FogEnabled],(float*)&_opengl_state.fog.enabled,fp_offset,GCM_LOCATION_RSX);
-	rsxSetFragmentProgramParameter(context,fpo,	_opengl_state.prog_consts[PS3GL_Uniform_FogColor],(float*)&_opengl_state.fog.color,fp_offset,GCM_LOCATION_RSX);
-
+	// For some reason rsxSetFragmentProgramParameter is broken with GCC 15.2.0
+	// so we need to use our own replacements (Located in ps3gl_helpers.h)
+	// to make sure code works independently of compiler version
 	rsxLoadFragmentProgramLocation(context,fpo,fp_offset,GCM_LOCATION_RSX);
-
+	rsxSetFragmentProgramParameterBool(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_TextureEnabled],_opengl_state.texture0Enabled,fp_offset,GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameterBool(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_FogEnabled],_opengl_state.fog.enabled,fp_offset,GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameterF32(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_TextureMode],_opengl_state.texEnvMode,fp_offset,GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameterF32Vec4(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_FogColor],_opengl_state.fog.color,fp_offset,GCM_LOCATION_RSX);
 }
 
 // TODO: This is a placeholder, replace with good api, closer to vitaGL
@@ -948,7 +856,6 @@ void ps3glInit(void)
 	_opengl_state.prog_consts[PS3GL_Uniform_TextureEnabled] = rsxFragmentProgramGetConst(fpo, "uTextureEnabled");
 	_opengl_state.prog_consts[PS3GL_Uniform_TextureMode] = rsxFragmentProgramGetConst(fpo, "uTextureMode");
 
-	//_opengl_state.prog_consts[PS3GL_Uniform_TextureHasAlpha] = rsxFragmentProgramGetConst(fpo, "uTextureHasAlpha");
 	_opengl_state.prog_consts[PS3GL_Uniform_FogEnabled] = rsxFragmentProgramGetConst(fpo, "uFogEnabled");
 	_opengl_state.prog_consts[PS3GL_Uniform_FogColor] = rsxFragmentProgramGetConst(fpo, "uFogColor");
 
@@ -962,18 +869,18 @@ void ps3glInit(void)
 	// Set default state
 	glColor3f(1.0f, 1.0f, 1.0f);
 	glColorMask(true, true, true, true);
-	glClearColor(0, 0, 0, 0);
 	
 	glDepthMask(true);
 	glDisable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 	glDepthRange(0, 1);
-	glClearDepth(1.0f);
 
 	glDisable(GL_TEXTURE_2D);
+
 	// Clear Values
-	_opengl_state.clear_stencil = 0;
-	//glClearStencil(0);
+	glClearColor(0, 0, 0, 0);
+	glClearDepth(1.0f);
+	glClearStencil(0);
 
 	// Matrices
 	glMatrixMode(GL_PROJECTION);
@@ -995,7 +902,7 @@ void ps3glInit(void)
 	_opengl_state.boundTexture->wrapS = GCM_TEXTURE_REPEAT;
 	_opengl_state.boundTexture->wrapT = GCM_TEXTURE_REPEAT;
 	_opengl_state.boundTexture->wrapR = GCM_TEXTURE_REPEAT;
-	_opengl_state.texEnvMode = GL_REPLACE;
+	_opengl_state.texEnvMode = PS3GL_TEXENV_REPLACE;
 
 
 }

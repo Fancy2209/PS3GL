@@ -111,6 +111,8 @@ void waitflip()
 	gcmResetFlipStatus();
 }
 
+// Fixes hangs with GCC15
+// Thanks to kd-11 for telling me how to fix the issue!
 static void resetCommandBuffer()
 {
 	rsxFinish(context, 1);

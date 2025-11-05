@@ -1,4 +1,7 @@
 // TexEnv Modes
+#define GL_BLEND	0
+#define GL_MODULATE	1
+#define GL_REPLACE	2
 
 void main
 (
@@ -13,11 +16,11 @@ void main
 	out float4 oColor : COLOR0,
 
 	// Uniforms
-	uniform bool uTextureEnabled = 0,
-	uniform int uTextureMode,
+	uniform bool uTextureEnabled,
+	uniform float uTextureMode,
 	uniform sampler2D uTextureUnit0,
 
-	uniform int uFogEnabled = 0,
+	uniform bool uFogEnabled,
 	uniform float4 uFogColor
 )
 {
@@ -26,17 +29,17 @@ void main
 	if(uTextureEnabled)
 	{
 		float4 texture0Color = tex2D(uTextureUnit0, vTexCoord0.st);
-		if(uTextureMode == 0)
+		if(uTextureMode == GL_BLEND)
 		{
 			oColor.rgb = lerp(oColor.rgb, float3(0,0,0), texture0Color.rgb);
 			oColor.a = oColor.a * texture0Color.a;
 			
 		}
-		if(uTextureMode == 1)
+		if(uTextureMode == GL_MODULATE)
 		{
 			oColor = oColor * texture0Color;
 		}
-		if(uTextureMode == 2)
+		if(uTextureMode == GL_REPLACE)
 		{
 			oColor = texture0Color;
 		}
