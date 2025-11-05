@@ -21,7 +21,9 @@ void main
 	uniform sampler2D uTextureUnit0,
 
 	uniform bool uFogEnabled,
-	uniform float4 uFogColor
+	uniform float4 uFogColor,
+
+	uniform float4 uBlendColor
 )
 {
 	oColor = vColor;
@@ -31,9 +33,7 @@ void main
 		float4 texture0Color = tex2D(uTextureUnit0, vTexCoord0.st);
 		if(uTextureMode == GL_BLEND)
 		{
-			oColor.rgb = lerp(oColor.rgb, float3(0,0,0), texture0Color.rgb);
-			oColor.a = oColor.a * texture0Color.a;
-			
+			oColor.rgb = lerp(oColor.rgb, uBlendColor.rgb, texture0Color.rgb);	
 		}
 		if(uTextureMode == GL_MODULATE)
 		{

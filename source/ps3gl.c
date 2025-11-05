@@ -1,7 +1,6 @@
 // PS3GL - An OpenGL 1.5 Compatibility Layer on top of the RSX API
 
 #include <GL/gl.h>
-
 // TODO: Move the rsxutil functionality into ps3glInit
 #include "rsxutil.h"
 
@@ -27,18 +26,18 @@ rsxFragmentProgram *fpo = (rsxFragmentProgram*)ffp_shader_fpo;
 
 void glClearColor( GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha )
 {
-	_opengl_state.clear_color.a = ((uint8_t)(alpha * 255.0f)); 
-	_opengl_state.clear_color.r = ((uint8_t)(red   * 255.0f)); 
-	_opengl_state.clear_color.g = ((uint8_t)(green * 255.0f));
-	_opengl_state.clear_color.b = ((uint8_t)(blue  * 255.0f));
+	_opengl_state.clear_color = 
+	(((uint8_t)(alpha * 255.0f)) << 24) |
+    (((uint8_t)(red   * 255.0f)) << 16) |
+    (((uint8_t)(green * 255.0f)) << 8)  |
+    (((uint8_t)(blue  * 255.0f)) << 0);
 }
 
-// from mesa
+// from mesa's nouveau driver, specifically nv30/nv30_clear.c
 static inline uint32_t
 pack_zeta(bool use_stencil, double depth, unsigned stencil)
 {
-   uint32_t zuint = (uint32_t)(depth * 4294967295.0);
-   //if (format != GCM_SURFACE_ZETA_Z16)
+   uint32_t zuint = (uint32_t)(depth * UINT32_MAX);
     if (use_stencil)
  	  return (zuint & 0xffffff00) | (stencil & 0xff);
    return zuint >> 16;
@@ -49,23 +48,31 @@ void glClear( GLbitfield mask )
 {
 	uint32_t rsx_mask = 0;
 
+	if(mask == (GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT))
+	{
+		rsx_mask = GCM_CLEAR_M;
+		rsxSetClearColor(context, _opengl_state.clear_color);
+		rsxSetClearDepthStencil(context, pack_zeta(true, _opengl_state.clear_depth, _opengl_state.clear_stencil));
+		rsxClearSurface(context, rsx_mask);
+		return;
+	} 
+
 	if(mask & GL_COLOR_BUFFER_BIT)
 	{
 		rsx_mask |= (GCM_CLEAR_A | GCM_CLEAR_R | GCM_CLEAR_G | GCM_CLEAR_B);
-		rsxSetClearColor(context,
-			(_opengl_state.clear_color.a << 24) |
-        	(_opengl_state.clear_color.r << 16) |
-        	(_opengl_state.clear_color.g << 8)  |
-        	(_opengl_state.clear_color.b << 0)
-		);
+		rsxSetClearColor(context, _opengl_state.clear_color);
 	}
-	if((mask & GL_DEPTH_BUFFER_BIT) || (mask & GL_STENCIL_BUFFER_BIT))
+	
+	if(mask & GL_DEPTH_BUFFER_BIT)
 	{
-		// TODO: We currently use GCM_SURFACE_ZETA_Z16, 
-		// pass true to pack_zeta when we enable stencil 
-		// and start using GCM_SURFACE_ZETA_Z24S8 instead.
-		rsxSetClearDepthStencil(context, pack_zeta(false, _opengl_state.clear_depth, _opengl_state.clear_stencil));
+		rsxSetClearDepthStencil(context, pack_zeta(true, _opengl_state.clear_depth, _opengl_state.clear_stencil));
 		rsx_mask |= GCM_CLEAR_Z;
+	}
+	
+	if(mask & GL_STENCIL_BUFFER_BIT)
+	{
+		rsxSetClearDepthStencil(context, pack_zeta(true, _opengl_state.clear_depth, _opengl_state.clear_stencil));
+		rsx_mask |= GCM_CLEAR_S;
 	}
 
 	rsxClearSurface(context, rsx_mask);
@@ -80,6 +87,57 @@ void glColorMask( GLboolean red, GLboolean green, GLboolean blue, GLboolean alph
 	if(alpha) _opengl_state.color_mask |= GCM_COLOR_MASK_A;
 }
 
+void glAlphaFunc( GLenum func, GLclampf ref )
+{
+	_opengl_state.alpha_func = func;
+	_opengl_state.alpha_func_ref = ref * 255;
+}
+
+void glBlendFunc( GLenum sfactor, GLenum dfactor )
+{
+	_opengl_state.blend_func_sfactor = sfactor;
+	_opengl_state.blend_func_dfactor = dfactor;
+}
+
+void glLogicOp( GLenum opcode )
+{
+	_opengl_state.logic_op = opcode;
+}
+
+void glCullFace( GLenum mode )
+{
+	_opengl_state.cull_face = mode;
+}
+
+void glFrontFace( GLenum mode )
+{
+	_opengl_state.front_face = mode;
+}
+
+void glPointSize( GLfloat size )
+{
+	_opengl_state.point_size = size;	
+}
+
+void glPolygonMode( GLenum face, GLenum mode )
+{
+	switch(face)
+	{
+		case GL_FRONT_AND_BACK:
+			rsxSetFrontPolygonMode(context, mode);
+			rsxSetBackPolygonMode(context, mode);
+			break;
+		case GL_FRONT:
+			rsxSetFrontPolygonMode(context, mode);
+			break;
+		case GL_BACK:
+			rsxSetBackPolygonMode(context, mode);
+			break;
+		default:
+			break;
+	}
+}
+
 void glScissor( GLint x, GLint y, GLsizei width, GLsizei height)
 {
 	_opengl_state.scissor.x = x;
@@ -92,14 +150,26 @@ void glEnable( GLenum cap )
 {
 	switch(cap)
 	{
-		case GL_FOG:
-			_opengl_state.fog.enabled = true;
+		case GL_ALPHA_TEST:
+			_opengl_state.alpha_test_enabled = true;
+			break;
+		case GL_BLEND:
+			_opengl_state.blend_enabled = true;
+			break;
+		case GL_CULL_FACE:
+			_opengl_state.cull_face_enabled = true;
+			break;
+		case GL_COLOR_LOGIC_OP:
+			_opengl_state.logic_op_enabled = true;
 			break;
 		case GL_DEPTH_TEST:
 			_opengl_state.depth_test = true;
 			break;
+		case GL_FOG:
+			_opengl_state.fog_enabled = true;
+			break;
 		case GL_TEXTURE_2D:
-			_opengl_state.texture0Enabled = true;
+			_opengl_state.texture0_enabled = true;
 			break;
 		default:
 			break;
@@ -110,14 +180,26 @@ void glDisable( GLenum cap )
 {
 	switch(cap)
 	{
-		case GL_FOG:
-			_opengl_state.fog.enabled = false;
+		case GL_ALPHA_TEST:
+			_opengl_state.alpha_test_enabled = false;
+			break;
+		case GL_BLEND:
+			_opengl_state.blend_enabled = false;
+			break;
+		case GL_CULL_FACE:
+			_opengl_state.cull_face_enabled = false;
+			break;
+		case GL_COLOR_LOGIC_OP:
+			_opengl_state.logic_op_enabled = false;
 			break;
 		case GL_DEPTH_TEST:
 			_opengl_state.depth_test = false;
 			break;
+		case GL_FOG:
+			_opengl_state.fog_enabled = false;
+			break;
 		case GL_TEXTURE_2D:
-			_opengl_state.texture0Enabled = false;
+			_opengl_state.texture0_enabled = false;
 			break;
 		default:
 			break;
@@ -396,7 +478,7 @@ void glVertex3fv(const GLfloat *v)
 	rsxDrawVertex3f(context, GCM_VERTEX_ATTRIB_POS, v);
 }
 
-GLAPI void GLAPIENTRY glNormal3f( GLfloat nx, GLfloat ny, GLfloat nz )
+void glNormal3f( GLfloat nx, GLfloat ny, GLfloat nz )
 {
 	// Stubbed until Lighting is added
 #if 0
@@ -506,49 +588,49 @@ void glTexParameteri( GLenum target, GLenum pname, GLint param )
 				switch(param)
 				{
 					case GL_NEAREST:
-						_opengl_state.boundTexture->minFilter = GCM_TEXTURE_NEAREST;
+						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_NEAREST;
 						break;
 					case GL_LINEAR:
-						_opengl_state.boundTexture->minFilter = GCM_TEXTURE_LINEAR;
+						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_LINEAR;
 						break;
 					case GL_NEAREST_MIPMAP_NEAREST:
-						_opengl_state.boundTexture->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_NEAREST;
+						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_NEAREST;
 						break;
 					case GL_LINEAR_MIPMAP_NEAREST:
-						_opengl_state.boundTexture->minFilter = GCM_TEXTURE_LINEAR_MIPMAP_NEAREST;
+						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_LINEAR_MIPMAP_NEAREST;
 						break;
 					case GL_NEAREST_MIPMAP_LINEAR:
-						_opengl_state.boundTexture->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_LINEAR;
+						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_LINEAR;
 						break;
 					case GL_LINEAR_MIPMAP_LINEAR:
-						_opengl_state.boundTexture->minFilter = GCM_TEXTURE_LINEAR_MIPMAP_LINEAR;
+						_opengl_state.bound_texture->minFilter = GCM_TEXTURE_LINEAR_MIPMAP_LINEAR;
 						break;
 					
 				}
 				break;
 		case GL_TEXTURE_MAG_FILTER:
 			if(param == GL_NEAREST) 
-				_opengl_state.boundTexture->magFilter = GCM_TEXTURE_NEAREST;
+				_opengl_state.bound_texture->magFilter = GCM_TEXTURE_NEAREST;
 			if(param == GL_LINEAR) 
-				_opengl_state.boundTexture->magFilter = GCM_TEXTURE_LINEAR;
+				_opengl_state.bound_texture->magFilter = GCM_TEXTURE_LINEAR;
 			break;
 		case GL_TEXTURE_WRAP_S:
 			switch(param)
 			{
 				case GL_CLAMP_TO_EDGE:
-					_opengl_state.boundTexture->wrapS = GCM_TEXTURE_CLAMP_TO_EDGE;
+					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_CLAMP_TO_EDGE;
 					break;
 				case GL_CLAMP_TO_BORDER:
-					_opengl_state.boundTexture->wrapS = GCM_TEXTURE_CLAMP_TO_BORDER;
+					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_CLAMP_TO_BORDER;
 					break;
 				case GL_MIRRORED_REPEAT:
-					_opengl_state.boundTexture->wrapS = GCM_TEXTURE_MIRRORED_REPEAT;
+					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_MIRRORED_REPEAT;
 					break;
 				case GL_REPEAT:
-					_opengl_state.boundTexture->wrapS = GCM_TEXTURE_REPEAT;
+					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_REPEAT;
 					break;
 				case GL_MIRROR_CLAMP_TO_EDGE:
-					_opengl_state.boundTexture->wrapS = GCM_TEXTURE_CLAMP_TO_EDGE;
+					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_CLAMP_TO_EDGE;
 					break;
 				}
 			break;
@@ -556,19 +638,19 @@ void glTexParameteri( GLenum target, GLenum pname, GLint param )
 			switch(param)
 			{
 				case GL_CLAMP_TO_EDGE:
-					_opengl_state.boundTexture->wrapT = GCM_TEXTURE_CLAMP_TO_EDGE;
+					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_CLAMP_TO_EDGE;
 					break;
 				case GL_CLAMP_TO_BORDER:
-					_opengl_state.boundTexture->wrapT = GCM_TEXTURE_CLAMP_TO_BORDER;
+					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_CLAMP_TO_BORDER;
 					break;
 				case GL_MIRRORED_REPEAT:
-					_opengl_state.boundTexture->wrapT = GCM_TEXTURE_MIRRORED_REPEAT;
+					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_MIRRORED_REPEAT;
 					break;
 				case GL_REPEAT:
-					_opengl_state.boundTexture->wrapT = GCM_TEXTURE_REPEAT;
+					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_REPEAT;
 					break;
 				case GL_MIRROR_CLAMP_TO_EDGE:
-					_opengl_state.boundTexture->wrapT = GCM_TEXTURE_CLAMP_TO_EDGE;
+					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_CLAMP_TO_EDGE;
 					break;
 			}
 			break;
@@ -576,19 +658,19 @@ void glTexParameteri( GLenum target, GLenum pname, GLint param )
 			switch(param)
 			{
 				case GL_CLAMP_TO_EDGE:
-					_opengl_state.boundTexture->wrapR = GCM_TEXTURE_CLAMP_TO_EDGE;
+					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_CLAMP_TO_EDGE;
 					break;
 				case GL_CLAMP_TO_BORDER:
-					_opengl_state.boundTexture->wrapR = GCM_TEXTURE_CLAMP_TO_BORDER;
+					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_CLAMP_TO_BORDER;
 					break;
 				case GL_MIRRORED_REPEAT:
-					_opengl_state.boundTexture->wrapR = GCM_TEXTURE_MIRRORED_REPEAT;
+					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_MIRRORED_REPEAT;
 					break;
 				case GL_REPEAT:
-					_opengl_state.boundTexture->wrapR = GCM_TEXTURE_REPEAT;
+					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_REPEAT;
 					break;
 				case GL_MIRROR_CLAMP_TO_EDGE:
-					_opengl_state.boundTexture->wrapR = GCM_TEXTURE_CLAMP_TO_EDGE;
+					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_CLAMP_TO_EDGE;
 					break;
 			}
 			break;
@@ -609,10 +691,10 @@ void glTexImage2D( GLenum target, GLint level,
                    GLint border, GLenum format, GLenum type,
                    const GLvoid *pixels )
 {
-	if (_opengl_state.boundTexture == NULL)
+	if (_opengl_state.bound_texture == NULL)
 		return;
 
-	struct ps3gl_texture *currentTexture = _opengl_state.boundTexture;
+	struct ps3gl_texture *currentTexture = _opengl_state.bound_texture;
 	currentTexture->gcmTexture.width = width;
 	currentTexture->gcmTexture.height = height;
 	currentTexture->gcmTexture.depth = 1;
@@ -622,14 +704,14 @@ void glTexImage2D( GLenum target, GLint level,
 	switch(target)
 		{
 			case GL_TEXTURE_1D:
-				_opengl_state.boundTexture->gcmTexture.dimension = GCM_TEXTURE_DIMS_1D;
+				_opengl_state.bound_texture->gcmTexture.dimension = GCM_TEXTURE_DIMS_1D;
 				break;
 			default:
 			case GL_TEXTURE_2D:
-				_opengl_state.boundTexture->gcmTexture.dimension = GCM_TEXTURE_DIMS_2D;
+				_opengl_state.bound_texture->gcmTexture.dimension = GCM_TEXTURE_DIMS_2D;
 				break;
 			case GL_TEXTURE_3D:
-				_opengl_state.boundTexture->gcmTexture.dimension = GCM_TEXTURE_DIMS_3D;
+				_opengl_state.bound_texture->gcmTexture.dimension = GCM_TEXTURE_DIMS_3D;
 				break;
 		}
 
@@ -718,7 +800,7 @@ void glDeleteTextures( GLsizei n, const GLuint *textures);
 void glBindTexture( GLenum target, GLuint texture )
 {
 	if (texture == 0) {
-        _opengl_state.boundTexture = NULL;
+        _opengl_state.bound_texture = NULL;
         return;
     }
 
@@ -727,7 +809,81 @@ void glBindTexture( GLenum target, GLuint texture )
         _opengl_state.textures[texture].gcmTexture.cubemap = (target == GL_TEXTURE_CUBE_MAP);
     }
 
-    _opengl_state.boundTexture = &_opengl_state.textures[texture];
+    _opengl_state.bound_texture = &_opengl_state.textures[texture];
+}
+
+/*
+ * Fog
+ */
+
+void glFogi( GLenum pname, GLint param )
+{
+	switch(pname)
+	{
+		case GL_FOG_MODE:
+			_opengl_state.fog_mode = param;
+			break;
+		case GL_FOG_START:
+		case GL_FOG_END:
+		case GL_FOG_DENSITY:
+			glFogf(pname, (GLfloat)param);
+			break;
+		default:
+			break;
+	}
+}
+
+void glFogf( GLenum pname, GLfloat param )
+{
+
+	switch(pname)
+	{
+		case GL_FOG_MODE:
+			glFogi(pname, (GLint)param);
+			break;
+		case GL_FOG_START:
+			_opengl_state.fog_start = param;
+			break;
+		case GL_FOG_END:
+			_opengl_state.fog_end = param;
+			break;
+		case GL_FOG_DENSITY:
+			_opengl_state.fog_density = param;
+			break;
+		default:
+			break;
+	}
+}
+
+void glFogfv( GLenum pname, const GLfloat *params )
+{
+	if(pname == GL_FOG_COLOR)
+	{
+		if(params != NULL)
+			memcpy(_opengl_state.fog_color, params, 4*sizeof(GLfloat));
+	}
+}
+
+void glBlendEquation( GLenum mode )
+{
+	_opengl_state.blend_equation = mode;
+}
+
+void glBlendColor( GLclampf red, GLclampf green,
+                                    GLclampf blue, GLclampf alpha )
+{
+	// Used in rsxSetBlendColor
+	_opengl_state.blend_color_rsx =
+	 (((uint8_t)(alpha * 255.0f)) << 24) |
+    (((uint8_t)(red   * 255.0f)) << 16) |
+    (((uint8_t)(green * 255.0f)) << 8)  |
+    (((uint8_t)(blue  * 255.0f)) << 0);
+
+	// Used for setting the BlendColor in the Shader
+	_opengl_state.blend_color_shader[0] = red;
+	_opengl_state.blend_color_shader[1] = green;
+	_opengl_state.blend_color_shader[2] = blue;
+	_opengl_state.blend_color_shader[3] = alpha;
 }
 
 
@@ -741,12 +897,12 @@ static void _program_exit_callback(void)
 
 void _ps3gl_load_texture(void)
 {
-	if((_opengl_state.texture0Unit == NULL || _opengl_state.boundTexture == NULL)) return;
+	if((_opengl_state.texture0Unit == NULL || _opengl_state.bound_texture == NULL)) return;
 
-	if(!_opengl_state.texture0Enabled) return;
+	if(!_opengl_state.texture0_enabled) return;
 
 	const int tu0Index = _opengl_state.texture0Unit->index;
-	const gcmTexture *boundGCMTex = &_opengl_state.boundTexture->gcmTexture;
+	const gcmTexture *boundGCMTex = &_opengl_state.bound_texture->gcmTexture;
 
 	rsxInvalidateTextureCache(context,GCM_INVALIDATE_TEXTURE);
 	rsxLoadTexture(context, 
@@ -754,7 +910,7 @@ void _ps3gl_load_texture(void)
 		boundGCMTex
 	);
 	rsxTextureControl(context, 
-		_opengl_state.texture0Unit->index, 
+		tu0Index, 
 		true,
 		0<<8,  // TODO: No idea if this is right for minLOD
 		12<<8, // TODO: No idea if this is right for maxLOD
@@ -763,15 +919,15 @@ void _ps3gl_load_texture(void)
 	rsxTextureFilter(context, 
 		tu0Index, 
 		0,
-		_opengl_state.boundTexture->minFilter,
-		_opengl_state.boundTexture->magFilter,
-		GCM_TEXTURE_CONVOLUTION_QUINCUNX // TODO: Do I use QUICKUNX or NONE?
+		_opengl_state.bound_texture->minFilter,
+		_opengl_state.bound_texture->magFilter,
+		GCM_TEXTURE_CONVOLUTION_QUINCUNX // TODO: Use QUICKUNX or NONE?
 	);
 	rsxTextureWrapMode(context,
 		tu0Index, 
-		_opengl_state.boundTexture->wrapS, 
-		_opengl_state.boundTexture->wrapT, 
-		_opengl_state.boundTexture->wrapR, 
+		_opengl_state.bound_texture->wrapS, 
+		_opengl_state.bound_texture->wrapT, 
+		_opengl_state.bound_texture->wrapR, 
 		0,
 		GCM_TEXTURE_ZFUNC_LESS, 
 		0
@@ -781,24 +937,48 @@ void _ps3gl_load_texture(void)
 void _setup_draw_env(void)
 {
 	rsxSetShadeModel(context, _opengl_state.shade_model);
+
 	rsxSetColorMask(context, _opengl_state.color_mask);
 	rsxSetColorMaskMrt(context,0);
 
+	// Alpha
+	rsxSetAlphaTestEnable(context, _opengl_state.alpha_test_enabled);
+	rsxSetAlphaFunc(context, _opengl_state.alpha_func, _opengl_state.alpha_func_ref);
+
+	// Blend
+	// TODO: BlendFuncSeparate/BlendEquationSeparate
+	rsxSetBlendEnable(context, _opengl_state.blend_enabled);
+	rsxSetBlendColor(context, _opengl_state.blend_color_rsx, 0);
+	rsxSetBlendFunc(context, 
+		_opengl_state.blend_func_sfactor, 
+		_opengl_state.blend_func_dfactor, 
+		_opengl_state.blend_func_sfactor, 
+		_opengl_state.blend_func_dfactor
+	);
+	rsxSetBlendEquation(context, _opengl_state.blend_equation, _opengl_state.blend_equation);
+	
+	rsxSetCullFaceEnable(context, _opengl_state.cull_face_enabled);
+	rsxSetCullFace(context, _opengl_state.cull_face);
+
+	rsxSetLogicOpEnable(context, _opengl_state.logic_op_enabled);
+	rsxSetLogicOp(context, _opengl_state.logic_op);
+	// Depth Testing
 	rsxSetDepthTestEnable(context, _opengl_state.depth_test);
 	rsxSetDepthWriteEnable(context, _opengl_state.depth_mask);
 	rsxSetDepthFunc(context, _opengl_state.depth_func);
 
-	if(_opengl_state.fog.enabled)
+	// Fog
+	if(_opengl_state.fog_enabled)
 	{
-		rsxSetFogMode(context, _opengl_state.fog.mode);
+		rsxSetFogMode(context, _opengl_state.fog_mode);
 		float p0 = 0;
 		float p1 = 0;
-		switch(_opengl_state.fog.mode)
+		switch(_opengl_state.fog_mode)
 		{
 			case GCM_FOG_MODE_LINEAR:
 				// TODO: Confirm these are right
-				p0 = _opengl_state.fog.end/(_opengl_state.fog.end-_opengl_state.fog.start);
-				p1 = 1/(_opengl_state.fog.end-_opengl_state.fog.start);
+				p0 = _opengl_state.fog_end/(_opengl_state.fog_end-_opengl_state.fog_start);
+				p1 = 1/(_opengl_state.fog_end-_opengl_state.fog_start);
 				break;
 			// TODO: Figure out EXP and EXP2 params
 			default:
@@ -808,6 +988,7 @@ void _setup_draw_env(void)
 		rsxSetFogParams(context, p0, p1);
 	}
 
+	// Viewport and Scissor
 	rsxSetViewport(context, 
 		_opengl_state.viewport.x, 
 		_opengl_state.viewport.y, 
@@ -816,13 +997,21 @@ void _setup_draw_env(void)
 		_opengl_state.depth_near,
 		_opengl_state.depth_far, 
 		_opengl_state.viewport.scale, 
-		_opengl_state.viewport.offset);
+		_opengl_state.viewport.offset
+	);
 
 	// TODO: Implement glScissor
-	rsxSetScissor(context, _opengl_state.scissor.x, _opengl_state.scissor.y, _opengl_state.scissor.w, _opengl_state.scissor.h);
+	rsxSetScissor(context, 
+		_opengl_state.scissor.x, 
+		_opengl_state.scissor.y, 
+		_opengl_state.scissor.w, 
+		_opengl_state.scissor.h
+	);
 
+	// Load Current Texture
 	_ps3gl_load_texture();
 
+	// Load Shader and Set Uniforms
 	rsxLoadVertexProgram(context,vpo,vp_ucode);
 	rsxSetVertexProgramParameter(context,vpo,_opengl_state.prog_consts[PS3GL_Uniform_ModelViewMatrix],(float*)&_opengl_state.modelview_matrix);
 	rsxSetVertexProgramParameter(context,vpo,_opengl_state.prog_consts[PS3GL_Uniform_ProjectionMatrix],(float*)&_opengl_state.projection_matrix);
@@ -831,10 +1020,11 @@ void _setup_draw_env(void)
 	// so we need to use our own replacements (Located in ps3gl_helpers.h)
 	// to make sure code works independently of compiler version
 	rsxLoadFragmentProgramLocation(context,fpo,fp_offset,GCM_LOCATION_RSX);
-	rsxSetFragmentProgramParameterBool(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_TextureEnabled],_opengl_state.texture0Enabled,fp_offset,GCM_LOCATION_RSX);
-	rsxSetFragmentProgramParameterBool(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_FogEnabled],_opengl_state.fog.enabled,fp_offset,GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameterBool(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_TextureEnabled],_opengl_state.texture0_enabled,fp_offset,GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameterBool(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_FogEnabled],_opengl_state.fog_enabled,fp_offset,GCM_LOCATION_RSX);
 	rsxSetFragmentProgramParameterF32(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_TextureMode],_opengl_state.texEnvMode,fp_offset,GCM_LOCATION_RSX);
-	rsxSetFragmentProgramParameterF32Vec4(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_FogColor],_opengl_state.fog.color,fp_offset,GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameterF32Vec4(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_FogColor],_opengl_state.fog_color,fp_offset,GCM_LOCATION_RSX);
+	rsxSetFragmentProgramParameterF32Vec4(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_BlendColor],_opengl_state.blend_color_shader,fp_offset,GCM_LOCATION_RSX);
 }
 
 // TODO: This is a placeholder, replace with good api, closer to vitaGL
@@ -859,22 +1049,36 @@ void ps3glInit(void)
 	_opengl_state.prog_consts[PS3GL_Uniform_FogEnabled] = rsxFragmentProgramGetConst(fpo, "uFogEnabled");
 	_opengl_state.prog_consts[PS3GL_Uniform_FogColor] = rsxFragmentProgramGetConst(fpo, "uFogColor");
 
+	_opengl_state.prog_consts[PS3GL_Uniform_BlendColor] = rsxFragmentProgramGetConst(fpo, "uBlendColor");
+
 	fp_buffer = (u32*)rsxMemalign(64,fpsize);
 	memcpy(fp_buffer,fp_ucode,fpsize);
 	rsxAddressToOffset(fp_buffer,&fp_offset);
-
-	_opengl_state.fog.enabled = false;
-	_opengl_state.texture0Enabled = false;
 
 	// Set default state
 	glColor3f(1.0f, 1.0f, 1.0f);
 	glColorMask(true, true, true, true);
 	
-	glDepthMask(true);
-	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_ALPHA_TEST); 
+	glAlphaFunc(GL_ALWAYS, 0);
+
+	glDisable(GL_BLEND); 
+	glBlendColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glBlendEquation(GL_FUNC_ADD);
+	glBlendFunc(GL_ONE, GL_ZERO);
+
+	glDisable(GL_CULL_FACE); 
+	glCullFace(GL_BACK);
+
+	glDisable(GL_COLOR_LOGIC_OP); 
+	glLogicOp(GL_COPY);
+
+	glDisable(GL_DEPTH_TEST); 
 	glDepthFunc(GL_LESS);
+	glDepthMask(true);
 	glDepthRange(0, 1);
 
+	glDisable(GL_FOG); 
 	glDisable(GL_TEXTURE_2D);
 
 	// Clear Values
@@ -893,16 +1097,16 @@ void ps3glInit(void)
 
 	// Textures
 	_opengl_state.nextTextureID = 1;
-    _opengl_state.boundTexture = &_opengl_state.textures[0];
-	_opengl_state.boundTexture->id = 0;
-	_opengl_state.boundTexture->allocated = true;
-	_opengl_state.boundTexture->data = NULL;
-	_opengl_state.boundTexture->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_LINEAR;
-	_opengl_state.boundTexture->magFilter = GCM_TEXTURE_LINEAR;
-	_opengl_state.boundTexture->wrapS = GCM_TEXTURE_REPEAT;
-	_opengl_state.boundTexture->wrapT = GCM_TEXTURE_REPEAT;
-	_opengl_state.boundTexture->wrapR = GCM_TEXTURE_REPEAT;
-	_opengl_state.texEnvMode = PS3GL_TEXENV_REPLACE;
+    _opengl_state.bound_texture = &_opengl_state.textures[0];
+	_opengl_state.bound_texture->id = 0;
+	_opengl_state.bound_texture->allocated = true;
+	_opengl_state.bound_texture->data = NULL;
+	_opengl_state.bound_texture->minFilter = GCM_TEXTURE_NEAREST_MIPMAP_LINEAR;
+	_opengl_state.bound_texture->magFilter = GCM_TEXTURE_LINEAR;
+	_opengl_state.bound_texture->wrapS = GCM_TEXTURE_REPEAT;
+	_opengl_state.bound_texture->wrapT = GCM_TEXTURE_REPEAT;
+	_opengl_state.bound_texture->wrapR = GCM_TEXTURE_REPEAT;
+	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
 
 }
@@ -911,53 +1115,3 @@ void ps3glSwapBuffers(void)
 {
 	flip();
 }
-
-void glFogi( GLenum pname, GLint param )
-{
-	switch(pname)
-	{
-		case GL_FOG_MODE:
-			_opengl_state.fog.mode = param;
-			break;
-		case GL_FOG_START:
-		case GL_FOG_END:
-		case GL_FOG_DENSITY:
-			glFogf(pname, (GLfloat)param);
-			break;
-		default:
-			break;
-	}
-}
-
-void glFogf( GLenum pname, GLfloat param )
-{
-
-	switch(pname)
-	{
-		case GL_FOG_MODE:
-			glFogi(pname, (GLint)param);
-			break;
-		case GL_FOG_START:
-			_opengl_state.fog.start = param;
-			break;
-		case GL_FOG_END:
-			_opengl_state.fog.end = param;
-			break;
-		case GL_FOG_DENSITY:
-			_opengl_state.fog.density = param;
-			break;
-		default:
-			break;
-	}
-}
-
-void glFogfv( GLenum pname, const GLfloat *params )
-{
-	if(pname == GL_FOG_COLOR)
-	{
-		if(params != NULL)
-			memcpy(_opengl_state.fog.color, params, 4*sizeof(GLfloat));
-	}
-}
-
-

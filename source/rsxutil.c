@@ -88,7 +88,7 @@ void setRenderTarget(u32 index)
 	sf.colorPitch[2]	= 64;
 	sf.colorPitch[3]	= 64;
 
-	sf.depthFormat		= GCM_SURFACE_ZETA_Z16;
+	sf.depthFormat		= GCM_SURFACE_ZETA_Z24S8;
 	sf.depthLocation	= GCM_LOCATION_RSX;
 	sf.depthOffset		= depth_offset;
 	sf.depthPitch		= depth_pitch;
