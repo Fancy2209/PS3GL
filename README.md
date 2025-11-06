@@ -16,4 +16,4 @@ NOTE: The ABI of ps3glInit isn't stable yet
 # Credits
 Fancy2209 - Author  
 kd-11 - Help with GCM and the RSX in general  
-Rinnegatamente - Told how to calculate the Model View Projection Matrix in a faster manner and making vitaGL, who inspired this project  
+Rinnegatamente - Told how to calculate the Model View Projection Matrix in a faster manner and made vitaGL, who inspired this project  
