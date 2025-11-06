@@ -121,21 +121,8 @@ void glPointSize( GLfloat size )
 
 void glPolygonMode( GLenum face, GLenum mode )
 {
-	switch(face)
-	{
-		case GL_FRONT_AND_BACK:
-			rsxSetFrontPolygonMode(context, mode);
-			rsxSetBackPolygonMode(context, mode);
-			break;
-		case GL_FRONT:
-			rsxSetFrontPolygonMode(context, mode);
-			break;
-		case GL_BACK:
-			rsxSetBackPolygonMode(context, mode);
-			break;
-		default:
-			break;
-	}
+	_opengl_state.polygon_mode_face = face;
+	_opengl_state.polygon_mode = mode;
 }
 
 void glScissor( GLint x, GLint y, GLsizei width, GLsizei height)
@@ -929,7 +916,7 @@ void _ps3gl_load_texture(void)
 		_opengl_state.bound_texture->wrapT, 
 		_opengl_state.bound_texture->wrapR, 
 		0,
-		GCM_TEXTURE_ZFUNC_LESS, 
+		(_opengl_state.depth_func - 0x200), // Texture Depth Func starts at 0, normal depth func starts at 0x200
 		0
 	);
 }
@@ -937,6 +924,7 @@ void _ps3gl_load_texture(void)
 void _setup_draw_env(void)
 {
 	rsxSetShadeModel(context, _opengl_state.shade_model);
+	rsxSetPointSize(context, _opengl_state.point_size);
 
 	rsxSetColorMask(context, _opengl_state.color_mask);
 	rsxSetColorMaskMrt(context,0);
@@ -962,10 +950,27 @@ void _setup_draw_env(void)
 
 	rsxSetLogicOpEnable(context, _opengl_state.logic_op_enabled);
 	rsxSetLogicOp(context, _opengl_state.logic_op);
+
 	// Depth Testing
 	rsxSetDepthTestEnable(context, _opengl_state.depth_test);
 	rsxSetDepthWriteEnable(context, _opengl_state.depth_mask);
 	rsxSetDepthFunc(context, _opengl_state.depth_func);
+
+	switch(_opengl_state.polygon_mode_face)
+	{
+		case GL_FRONT_AND_BACK:
+			rsxSetFrontPolygonMode(context, _opengl_state.polygon_mode);
+			rsxSetBackPolygonMode(context, _opengl_state.polygon_mode);
+			break;
+		case GL_FRONT:
+			rsxSetFrontPolygonMode(context, _opengl_state.polygon_mode);
+			break;
+		case GL_BACK:
+			rsxSetBackPolygonMode(context, _opengl_state.polygon_mode);
+			break;
+		default:
+			break;
+	}
 
 	// Fog
 	if(_opengl_state.fog_enabled)
@@ -1058,6 +1063,11 @@ void ps3glInit(void)
 	// Set default state
 	glColor3f(1.0f, 1.0f, 1.0f);
 	glColorMask(true, true, true, true);
+
+	glPointSize(1.0f);
+	glShadeModel(GL_SMOOTH);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	glFrontFace(GL_CCW);
 	
 	glDisable(GL_ALPHA_TEST); 
 	glAlphaFunc(GL_ALWAYS, 0);
@@ -1092,8 +1102,6 @@ void ps3glInit(void)
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
-	// Lighting
-	glShadeModel(GL_SMOOTH);
 
 	// Textures
 	_opengl_state.nextTextureID = 1;

@@ -127,6 +127,8 @@ struct ps3gl_opengl_state
 	// Misc
 	GLenum front_face;
 	GLfloat point_size;
+	GLenum polygon_mode_face;
+	GLenum polygon_mode;
 
 	GLboolean logic_op_enabled;
 	GLenum logic_op;
