@@ -111,7 +111,9 @@ void glCullFace( GLenum mode )
 
 void glFrontFace( GLenum mode )
 {
-	_opengl_state.front_face = mode;
+	// The Enum values match BUT 
+	// due to how the RSX Works GL_CW == GCM_CCW and GL_CCW == GL_CW
+	_opengl_state.front_face = mode ^ 1u;
 }
 
 void glPointSize( GLfloat size )
