@@ -116,11 +116,11 @@ clean:
 	@rm -fr $(BUILD) $(OUTPUT).elf $(OUTPUT).self
 #---------------------------------------------------------------------------------
 install:
-	@echo installing to $(PS3DEV)/ppu/portlibs ...
-	mkdir -p $(PS3DEV)/ppu/portlibs/lib
-	cp -r libPS3GL.a $(PS3DEV)/ppu/portlibs/lib
-	mkdir -p $(PS3DEV)/ppu/portlibs/include
-	cp -r include/* $(PS3DEV)/ppu/portlibs/include
+	@echo installing to $(PS3DEV)/portlibs/ppu ...
+	mkdir -p $(PS3DEV)/portlibs/ppu/lib
+	cp -r libPS3GL.a $(PS3DEV)/portlibs/ppu/lib
+	mkdir -p $(PS3DEV)/portlibs/ppu/include
+	cp -r include/* $(PS3DEV)/portlibs/ppu/include
 #---------------------------------------------------------------------------------
 
 else

@@ -44,7 +44,7 @@ LIBS	:=	-lPS3GL -lsimdmath -lrsx -lgcm_sys -lio -lsysutil -lrt -llv2 -lm
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:= $(PS3DEV)/ppu/portlibs
+LIBDIRS	:= $(PS3DEV)/portlibs/ppu
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
