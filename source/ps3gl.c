@@ -755,19 +755,15 @@ void glTexImage2D( GLenum target, GLint level,
 			rsxAddressToOffset(currentTexture->data, &currentTexture->gcmTexture.offset);
 			currentTexture->gcmTexture.format = GCM_TEXTURE_FORMAT_A8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
 			currentTexture->gcmTexture.remap  = (
-							// Maps Red to first Channel 
+						   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_R_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_B_SHIFT) |					   
+						   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_A_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_R << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) |
 						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_R_SHIFT) |
-						   (GCM_TEXTURE_REMAP_COLOR_R << GCM_TEXTURE_REMAP_COLOR_A_SHIFT) |
-							// Maps Red to second Channel 
 						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |	
-						   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_R_SHIFT) |
-							// Maps Red to third Channel 
 						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_B_SHIFT) |
-						   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) |
-						   // Maps Alpha to last Channel 
 						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_A_SHIFT) |
-						   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_B_SHIFT)
-			);
+							);
 			break;
 		}
 	}
@@ -935,6 +931,15 @@ void _ps3gl_load_texture(void)
 		(_opengl_state.depth_func - 0x200), // Texture Depth Func starts at 0, normal depth func starts at 0x200
 		0
 	);
+}
+
+void glGetFloatv(GLenum pname, GLfloat *params)
+{
+	if(pname == GL_MODELVIEW_MATRIX)
+	{
+		float* mvp = (float*)&_opengl_state.modelview_matrix;
+		__builtin_memcpy(params, mvp, sizeof(float)*16);
+	}
 }
 
 void _setup_draw_env(void)
