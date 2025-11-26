@@ -716,6 +716,7 @@ void glTexImage2D( GLenum target, GLint level,
 	switch(format)
 	{
 		case GL_RGB:
+		{
 			const uint8_t *src = (const uint8_t*)pixels;
 			const int textureSize = width*height*4;
 			currentTexture->data = (uint8_t*)rsxMemalign(128, textureSize);
@@ -736,7 +737,9 @@ void glTexImage2D( GLenum target, GLint level,
 						   (GCM_TEXTURE_REMAP_COLOR_R << GCM_TEXTURE_REMAP_COLOR_R_SHIFT) |
 						   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_A_SHIFT));
 			break;
+		}
 		case GL_RGBA:
+		{
 			currentTexture->data = (uint8_t*)rsxMemalign(128, width*height*4);
 			memcpy((void*)currentTexture->data, pixels, width*height*4);
 			rsxAddressToOffset(currentTexture->data, &currentTexture->gcmTexture.offset);
@@ -756,6 +759,7 @@ void glTexImage2D( GLenum target, GLint level,
 						   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_B_SHIFT)
 			);
 			break;
+		}
 	}
 }
 
