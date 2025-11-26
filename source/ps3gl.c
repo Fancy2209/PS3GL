@@ -489,6 +489,16 @@ void glColor4f( GLfloat red, GLfloat green,
 	rsxDrawVertex4f(context, GCM_VERTEX_ATTRIB_COLOR0, v);
 }
 
+void glColor4fv(const GLfloat * v)
+{
+	rsxDrawVertex4f(context, GCM_VERTEX_ATTRIB_COLOR0, v);
+}
+
+void glColor4ubv(const GLubyte * v)
+{
+	glColor4f(v[0]/255.0f, v[1]/255.0f, v[2]/255.0f, v[3]/255.0f);
+}
+
 
 void glTexCoord2f(GLfloat s, GLfloat t)
 {
