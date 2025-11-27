@@ -930,7 +930,7 @@ void _ps3gl_load_texture(void)
 		_opengl_state.bound_texture->wrapT, 
 		_opengl_state.bound_texture->wrapR, 
 		0,
-		(_opengl_state.depth_func - 0x200), // Texture Depth Func starts at 0, normal depth func starts at 0x200
+		GCM_TEXTURE_ZFUNC_LESS, // Texture Depth Func starts at 0, normal depth func starts at 0x200
 		0
 	);
 }
