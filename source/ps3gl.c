@@ -805,7 +805,7 @@ void glBindTexture( GLenum target, GLuint texture )
         return;
     }
 
-	if(texture < MAX_TEXTURES && !_opengl_state.textures[texture].allocated {
+	if(texture < MAX_TEXTURES && !_opengl_state.textures[texture].allocated) {
 		_opengl_state.textures[texture].id = texture;
 		_opengl_state.textures[texture].allocated = true;
 		_opengl_state.textures[texture].minFilter = GCM_TEXTURE_NEAREST_MIPMAP_LINEAR;
