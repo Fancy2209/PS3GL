@@ -8,6 +8,9 @@
 #include "ffp_shader_vpo.h"
 #include "ffp_shader_fpo.h"
 
+#ifndef GCM_TEXTURE_MIRROR_CLAMP_TO_EDGE
+#define GCM_TEXTURE_MIRROR_CLAMP_TO_EDGE GCM_TEXTURE_MIRROR_ONCE_CLAMP_TO_EDGE 
+#endif
 
 static struct ps3gl_opengl_state _opengl_state;
 
