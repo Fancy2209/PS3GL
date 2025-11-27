@@ -629,7 +629,7 @@ void glTexParameteri( GLenum target, GLenum pname, GLint param )
 					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_REPEAT;
 					break;
 				case GL_MIRROR_CLAMP_TO_EDGE:
-					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_CLAMP_TO_EDGE;
+					_opengl_state.bound_texture->wrapS = GCM_TEXTURE_MIRROR_CLAMP_TO_EDGE;
 					break;
 				}
 			break;
@@ -649,7 +649,7 @@ void glTexParameteri( GLenum target, GLenum pname, GLint param )
 					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_REPEAT;
 					break;
 				case GL_MIRROR_CLAMP_TO_EDGE:
-					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_CLAMP_TO_EDGE;
+					_opengl_state.bound_texture->wrapT = GCM_TEXTURE_MIRROR_CLAMP_TO_EDGE;
 					break;
 			}
 			break;
@@ -669,7 +669,7 @@ void glTexParameteri( GLenum target, GLenum pname, GLint param )
 					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_REPEAT;
 					break;
 				case GL_MIRROR_CLAMP_TO_EDGE:
-					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_CLAMP_TO_EDGE;
+					_opengl_state.bound_texture->wrapR = GCM_TEXTURE_MIRROR_CLAMP_TO_EDGE;
 					break;
 			}
 			break;
@@ -805,7 +805,19 @@ void glBindTexture( GLenum target, GLuint texture )
         return;
     }
 
-    if (texture < MAX_TEXTURES && !_opengl_state.textures[texture].allocated) {
+	if(texture < MAX_TEXTURES && !_opengl_state.textures[texture].allocated {
+		_opengl_state.textures[texture].id = texture;
+		_opengl_state.textures[texture].allocated = true;
+		_opengl_state.textures[texture].minFilter = GCM_TEXTURE_NEAREST_MIPMAP_LINEAR;
+		_opengl_state.textures[texture].magFilter = GCM_TEXTURE_LINEAR;
+		_opengl_state.textures[texture].data = NULL;
+        _opengl_state.textures[texture].target = GL_TEXTURE_2D;
+        _opengl_state.textures[texture].wrapS = GCM_TEXTURE_REPEAT;
+        _opengl_state.textures[texture].wrapT = GCM_TEXTURE_REPEAT;
+        _opengl_state.textures[texture].wrapR = GCM_TEXTURE_REPEAT;
+	}
+
+    if (texture < MAX_TEXTURES && _opengl_state.textures[texture].allocated) {
         _opengl_state.textures[texture].target = target;
         _opengl_state.textures[texture].gcmTexture.cubemap = (target == GL_TEXTURE_CUBE_MAP);
     }
