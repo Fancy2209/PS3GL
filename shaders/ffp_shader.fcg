@@ -8,12 +8,11 @@ void main
 	// From Vertex Shader
     in float4 vColor     : COLOR0,
     in float2 vTexCoord0 : TEXCOORD0,
-
 	// From RSX
-	float vFog : FOG,
+	in float vFog        : FOG,
 	
 	// Out
-	out float4 oColor : COLOR0,
+	out float4 oColor    : COLOR0,
 
 	// Uniforms
 	uniform bool uTextureEnabled,
@@ -21,9 +20,7 @@ void main
 	uniform sampler2D uTextureUnit0,
 
 	uniform bool uFogEnabled,
-	uniform float4 uFogColor,
-
-	uniform float4 uBlendColor
+	uniform float4 uFogColor
 )
 {
 	oColor = vColor;
@@ -33,7 +30,7 @@ void main
 		float4 texture0Color = tex2D(uTextureUnit0, vTexCoord0.st);
 		if(uTextureMode == GL_BLEND)
 		{
-			oColor.rgb = lerp(oColor.rgb, uBlendColor.rgb, texture0Color.rgb);	
+			oColor.rgb = lerp(oColor.rgb, float4(0,0,0,0), texture0Color.a);	
 		}
 		if(uTextureMode == GL_MODULATE)
 		{

@@ -46,7 +46,7 @@ u32 *color_buffer[2];
 
 static u32 sLabelVal = 1;
 
-static void waitFinish()
+void waitFinish(void)
 {
 	rsxSetWriteBackendLabel(context,GCM_LABEL_INDEX,sLabelVal);
 
@@ -58,7 +58,7 @@ static void waitFinish()
 	++sLabelVal;
 }
 
-static void waitRSXIdle()
+void waitRSXIdle()
 {
 	rsxSetWriteBackendLabel(context,GCM_LABEL_INDEX,sLabelVal);
 	rsxSetWaitLabel(context,GCM_LABEL_INDEX,sLabelVal);

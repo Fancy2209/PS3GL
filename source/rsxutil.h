@@ -24,7 +24,7 @@ extern u32 depth_offset;
 
 void setRenderTarget(u32 index);
 void waitflip();
-
+void waitFinish(void);
 
 void init_screen(void *host_addr,u32 size);
 void flip();

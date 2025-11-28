@@ -1,9 +1,9 @@
 void main
 (
     // Vertex Attributes
-    float3 aPos : POSITION,
-    float2 aTexCoord0 : TEXCOORD0,
-    float4 aColor : COLOR0,
+    in float3 aPos        : POSITION,
+    in float2 aTexCoord0  : TEXCOORD0,
+    in float4 aColor      : COLOR0,
 
     // Out
     out float4 vPosition  : POSITION,

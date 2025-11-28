@@ -1,6 +1,7 @@
 // PS3GL - An OpenGL 1.5 Compatibility Layer on top of the RSX API
 
 #include <GL/gl.h>
+#include <stdint.h>
 // TODO: Move the rsxutil functionality into ps3glInit
 #include "rsxutil.h"
 
@@ -253,6 +254,41 @@ void glMatrixMode( GLenum mode )
 			fprintf(stderr, "Unimplemented MatrixMode: %u", mode);
 			break;
 	}
+}
+
+// glPopMatrix and glPushMatrix are based on OpenGX
+void glPopMatrix(void)
+{
+    switch (_opengl_state.matrix_mode) {
+    case GL_PROJECTION:
+        memcpy(&_opengl_state.projection_matrix, &_opengl_state.projection_stack[_opengl_state.cur_proj_mat], sizeof(VmathMatrix4));
+        _opengl_state.cur_proj_mat--;
+		
+        break;
+    case GL_MODELVIEW:
+        memcpy(&_opengl_state.modelview_matrix, &_opengl_state.modelview_stack[_opengl_state.cur_modv_mat], sizeof(VmathMatrix4));
+        _opengl_state.cur_modv_mat--;
+        break;
+    default:
+        break;
+    }
+    //glparamstate.dirty.bits.dirty_matrices = 1;
+}
+
+void glPushMatrix(void)
+{
+    switch (_opengl_state.matrix_mode) {
+    case GL_PROJECTION:
+        _opengl_state.cur_proj_mat++;
+        memcpy(&_opengl_state.projection_stack[_opengl_state.cur_proj_mat], &_opengl_state.projection_matrix, sizeof(VmathMatrix4));
+        break;
+    case GL_MODELVIEW:
+        _opengl_state.cur_modv_mat++;
+        memcpy(&_opengl_state.modelview_stack[_opengl_state.cur_modv_mat], &_opengl_state.modelview_matrix, sizeof(VmathMatrix4));
+        break;
+    default:
+        break;
+    }
 }
 
 void glOrtho( GLdouble left, GLdouble right,
@@ -742,14 +778,14 @@ void glTexImage2D( GLenum target, GLint level,
 			rsxAddressToOffset(currentTexture->data, &currentTexture->gcmTexture.offset);
 			currentTexture->gcmTexture.format = GCM_TEXTURE_FORMAT_A8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
 			currentTexture->gcmTexture.remap  = (
-						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_B_SHIFT) |
-						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |
-						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_R_SHIFT) |
 						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_A_SHIFT) |
-						   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_B_SHIFT) |
-						   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) |
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_R_SHIFT) |
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_A_SHIFT) |
 						   (GCM_TEXTURE_REMAP_COLOR_R << GCM_TEXTURE_REMAP_COLOR_R_SHIFT) |
-						   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_A_SHIFT)
+						   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) |
+						   (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_B_SHIFT)
 			);
 			break;
 		}
@@ -771,7 +807,60 @@ void glTexImage2D( GLenum target, GLint level,
 			);
 			break;
 		}
+		default:
+			printf("Unimplemented Texture Format %u\n!!!!!!", format);
 	}
+}
+
+void glTexSubImage2D( 
+	GLenum target, GLint level,
+    GLint xoffset, GLint yoffset,
+    GLsizei width, GLsizei height,
+    GLenum format, GLenum type,
+    const GLvoid *pixels 
+)
+{
+	
+	if (_opengl_state.bound_texture == NULL)
+		return;
+
+	struct ps3gl_texture *currentTexture = _opengl_state.bound_texture;
+	if(currentTexture->target != target) return;
+
+	uint8_t *transferBuffer = NULL;
+	switch(format)
+	{
+		case GL_RGBA:
+		case GL_RGBA8:
+		case 4:
+		{
+			const int textureSize = width*height*4;
+			transferBuffer = (uint8_t*)rsxMemalign(128, textureSize);
+			u32 transferBufferOffset;
+			memcpy((void*)transferBuffer, pixels, width*height*4);
+			rsxAddressToOffset(transferBuffer, &transferBufferOffset);
+			rsxSetTransferImage(
+				context, // context
+				GCM_TRANSFER_LOCAL_TO_LOCAL, //mode
+				currentTexture->gcmTexture.offset, // dstOffset
+				currentTexture->gcmTexture.pitch, // dstPitch
+				xoffset, // dstX
+				yoffset, // dstY
+				transferBufferOffset, // srcOffset
+				width*4, // srcPitch
+				0, // srcX 
+				0, //  srcY
+				width, // width
+				height, // height
+				4 // bpp
+			);
+			break;
+		}
+	}
+	rsxFinish(context, 1);
+	waitFinish();
+	if(transferBuffer != NULL)
+		rsxFree(transferBuffer);
 }
 
 void glGenTextures( GLsizei n, GLuint *textures )
@@ -894,12 +983,6 @@ void glBlendColor( GLclampf red, GLclampf green,
     (((uint8_t)(red   * 255.0f)) << 16) |
     (((uint8_t)(green * 255.0f)) << 8)  |
     (((uint8_t)(blue  * 255.0f)) << 0);
-
-	// Used for setting the BlendColor in the Shader
-	_opengl_state.blend_color_shader[0] = red;
-	_opengl_state.blend_color_shader[1] = green;
-	_opengl_state.blend_color_shader[2] = blue;
-	_opengl_state.blend_color_shader[3] = alpha;
 }
 
 
@@ -1067,7 +1150,6 @@ void _setup_draw_env(void)
 	rsxSetFragmentProgramParameterBool(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_FogEnabled],_opengl_state.fog_enabled,fp_offset,GCM_LOCATION_RSX);
 	rsxSetFragmentProgramParameterF32(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_TextureMode],_opengl_state.texEnvMode,fp_offset,GCM_LOCATION_RSX);
 	rsxSetFragmentProgramParameterF32Vec4(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_FogColor],_opengl_state.fog_color,fp_offset,GCM_LOCATION_RSX);
-	rsxSetFragmentProgramParameterF32Vec4(context,fpo,_opengl_state.prog_consts[PS3GL_Uniform_BlendColor],_opengl_state.blend_color_shader,fp_offset,GCM_LOCATION_RSX);
 }
 
 // TODO: This is a placeholder, replace with good api, closer to vitaGL
@@ -1091,8 +1173,6 @@ void ps3glInit(void)
 
 	_opengl_state.prog_consts[PS3GL_Uniform_FogEnabled] = rsxFragmentProgramGetConst(fpo, "uFogEnabled");
 	_opengl_state.prog_consts[PS3GL_Uniform_FogColor] = rsxFragmentProgramGetConst(fpo, "uFogColor");
-
-	_opengl_state.prog_consts[PS3GL_Uniform_BlendColor] = rsxFragmentProgramGetConst(fpo, "uBlendColor");
 
 	fp_buffer = (u32*)rsxMemalign(64,fpsize);
 	memcpy(fp_buffer,fp_ucode,fpsize);
@@ -1139,6 +1219,8 @@ void ps3glInit(void)
 	glLoadIdentity();	
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
+	_opengl_state.cur_proj_mat = 0;
+    _opengl_state.cur_modv_mat = 0;
 
 
 	// Textures

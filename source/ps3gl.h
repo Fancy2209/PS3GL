@@ -37,7 +37,6 @@ enum _ps3gl_rsx_constants
 	PS3GL_Uniform_TextureMode,
 	PS3GL_Uniform_FogEnabled,
 	PS3GL_Uniform_FogColor,
-	PS3GL_Uniform_BlendColor,
 
 	// Num
 	PS3GL_Uniform_Count,
@@ -96,17 +95,23 @@ struct ps3gl_opengl_state
 	GLenum blend_func_sfactor;
 	GLenum blend_func_dfactor;
 
-	// Matrices // TODO: Add Stack for Push/PopMatrix
+	// Matrices
 	GLuint matrix_mode;
+	
+	int cur_modv_mat;
 	VmathMatrix4 modelview_matrix;
+	VmathMatrix4 modelview_stack[MAX_MODV_STACK];
+	
+	int cur_proj_mat;
     VmathMatrix4 projection_matrix;
+    VmathMatrix4 projection_stack[MAX_PROJ_STACK];
+
     VmathMatrix4 *curr_mtx;
 
 	// Textures
 	rsxProgramAttrib* texture0Unit;
 	GLboolean texture0_enabled;
 	GLuint blend_color_rsx;
-	GLclampf blend_color_shader[4];
 	GLfloat texEnvMode; 
 	struct ps3gl_texture textures[MAX_TEXTURES];
 	struct ps3gl_texture *bound_texture;
