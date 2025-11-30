@@ -535,7 +535,7 @@ void glColor4fv(const GLfloat * v)
 
 void glColor4ubv(const GLubyte * v)
 {
-	glColor4f(v[0]/255.0f, v[1]/255.0f, v[2]/255.0f, v[3]/255.0f);
+	rsxDrawVertex4ub(context, GCM_VERTEX_ATTRIB_COLOR0, v);
 }
 
 
@@ -904,10 +904,6 @@ void glDeleteTextures( GLsizei n, const GLuint *textures)
 
 void glBindTexture( GLenum target, GLuint texture )
 {
-	if (texture == 0) {
-        _opengl_state.bound_texture = NULL;
-        return;
-    }
 
 	if(texture < MAX_TEXTURES && !_opengl_state.textures[texture].allocated) {
 		_opengl_state.textures[texture].id = texture;
