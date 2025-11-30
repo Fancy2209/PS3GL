@@ -732,6 +732,8 @@ void glTexImage2D( GLenum target, GLint level,
 	if (_opengl_state.bound_texture == NULL)
 		return;
 
+	if(pixels == NULL) return;
+
 	struct ps3gl_texture *currentTexture = _opengl_state.bound_texture;
 	currentTexture->gcmTexture.width = width;
 	currentTexture->gcmTexture.height = height;
@@ -781,7 +783,7 @@ void glTexImage2D( GLenum target, GLint level,
 						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_A_SHIFT) |
 						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_R_SHIFT) |
 						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |
-						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |
+						   (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_B_SHIFT) |
 						   (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_A_SHIFT) |
 						   (GCM_TEXTURE_REMAP_COLOR_R << GCM_TEXTURE_REMAP_COLOR_R_SHIFT) |
 						   (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) |
@@ -792,7 +794,8 @@ void glTexImage2D( GLenum target, GLint level,
 		case GL_RGBA:
 		{
 			currentTexture->data = (uint8_t*)rsxMemalign(128, width*height*4);
-			memcpy((void*)currentTexture->data, pixels, width*height*4);
+			if(pixels)
+				memcpy((void*)currentTexture->data, pixels, width*height*4);
 			rsxAddressToOffset(currentTexture->data, &currentTexture->gcmTexture.offset);
 			currentTexture->gcmTexture.format = GCM_TEXTURE_FORMAT_A8R8G8B8|GCM_TEXTURE_FORMAT_LIN;
 			currentTexture->gcmTexture.remap  = (
@@ -888,7 +891,16 @@ void glGenTextures( GLsizei n, GLuint *textures )
 	}
 }
 
-void glDeleteTextures( GLsizei n, const GLuint *textures);
+void glDeleteTextures( GLsizei n, const GLuint *textures)
+{
+	for(size_t i = 0; i > n; i++)
+	{
+		if(_opengl_state.textures[textures[i]].data != NULL)
+			rsxFree(_opengl_state.textures[textures[i]].data);
+		_opengl_state.textures[textures[i]].data = NULL;
+		_opengl_state.textures[textures[i]].allocated = false;
+	}
+}
 
 void glBindTexture( GLenum target, GLuint texture )
 {
