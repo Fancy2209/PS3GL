@@ -6,12 +6,10 @@ https://github.com/user-attachments/assets/5fad3b1b-b056-4624-888f-c325e55272db
 NOTE: The ABI of ps3glInit isn't stable yet 
 
 # TODO
-- Make RGB -> DRGB and RGBA -> ARGB conversion faster (Maybe using Altivec?)
-- Implement glMatrixPush/glMatrixPop
+- Make RGB -> XRGB conversion faster (Maybe using Altivec?)
 - Implement Lights
-- Implement Fog
-- Implement Textures (WIP)
-- Make code less bad
+- Implement Fog (Added, not sure if it works though)
+- Implement more Texture Formats
 
 # Credits
 Fancy2209 - Author  
