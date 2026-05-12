@@ -18,6 +18,7 @@ extern u32 curr_fb;
 
 extern u32 color_pitch;
 extern u32 color_offset[2];
+extern u32 *color_buffer[2];
 
 extern u32 depth_pitch;
 extern u32 depth_offset;

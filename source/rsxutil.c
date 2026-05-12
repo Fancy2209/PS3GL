@@ -72,7 +72,7 @@ void setRenderTarget(u32 index)
 {
 	gcmSurface sf;
 
-	sf.colorFormat		= GCM_SURFACE_X8R8G8B8;
+	sf.colorFormat		= GCM_SURFACE_A8R8G8B8;
 	sf.colorTarget		= GCM_SURFACE_TARGET_0;
 	sf.colorLocation[0]	= GCM_LOCATION_RSX;
 	sf.colorOffset[0]	= color_offset[index];
