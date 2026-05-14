@@ -9,7 +9,8 @@ NOTE: The ABI of ps3glInit isn't stable yet
 - Make RGB -> XRGB conversion faster (Maybe using Altivec?)
 - Implement Lights
 - Implement Fog (Added, not sure if it works though)
-- Implement more Texture Formats
+- Implement more Texture Formats and stop assuming RGBA Everywhere
+- NV_vertex_program3/NV_fragment_program2 support using the PSL1GHT CGComp Source Code.  
 
 # Credits
 Fancy2209 - Author  
